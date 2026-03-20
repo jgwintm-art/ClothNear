@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "917969859882",
+    "project_id": "clothnear",
+    "storage_bucket": "clothnear.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:917969859882:android:c8c5fe0032151cfe621a53",
+        "android_client_info": {
+          "package_name": "com.example.clothnear"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCt3kTF3l5vvCz72zoz7-ccv3uuYyTq9iA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
