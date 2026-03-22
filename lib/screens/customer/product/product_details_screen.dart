@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../../models/product_model.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../../models/cart_model.dart';
+import '../../../services/cart_service.dart';
+import '../cart/cart_screen.dart';
 
 class ProductDetailsScreen extends StatefulWidget {
   final ProductModel product;
@@ -59,6 +63,38 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     });
   }
 
+  // ✅ FIXED: addToCart now passes uid as first arg
+  // CartItemModel uses storeStoreName instead of customerUid
+  Future<void> _addToCart() async {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    final cartItem = CartItemModel(
+      cartItemId: '',
+      productId: widget.product.productId,
+      storeId: widget.product.storeId,
+      productName: widget.product.name,
+      color: _selectedColor!,
+      size: _selectedSize!,
+      price: _selectedVariant!.price,
+      quantity: _quantity,
+      storeStoreName: '',
+    );
+    await CartService().addToCart(uid, cartItem);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Added to cart!'),
+          action: SnackBarAction(
+            label: 'View Cart',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const CartScreen()),
+            ),
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorMap = {
@@ -79,7 +115,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           Expanded(
             child: CustomScrollView(
               slivers: [
-                // Product image
                 SliverAppBar(
                   expandedHeight: 280,
                   pinned: true,
@@ -127,7 +162,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     ),
                   ),
                 ),
-
                 SliverToBoxAdapter(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -387,7 +421,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                           ),
                                         ),
                                       ),
-                                      // Strikethrough for out of stock
                                       if (exists && !isAvailable)
                                         Positioned.fill(
                                           child: CustomPaint(
@@ -538,17 +571,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: _isCombinationValid
-                        ? () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'Added ${widget.product.name} (${_selectedColor!} • ${_selectedSize!}) to cart!',
-                                ),
-                              ),
-                            );
-                          }
-                        : null,
+                    onPressed: _isCombinationValid ? _addToCart : null,
                     style: OutlinedButton.styleFrom(
                       side: BorderSide(
                         color: _isCombinationValid
@@ -574,7 +597,19 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: _isCombinationValid ? () {} : null,
+                    onPressed: _isCombinationValid
+                        ? () async {
+                            await _addToCart();
+                            if (context.mounted) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const CartScreen(),
+                                ),
+                              );
+                            }
+                          }
+                        : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _isCombinationValid
                           ? Colors.blue[700]
@@ -602,7 +637,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   }
 }
 
-// Custom painter for strikethrough on out of stock sizes
 class _StrikethroughPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
