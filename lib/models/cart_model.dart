@@ -8,6 +8,9 @@ class CartItemModel {
   final double price;
   int quantity;
   final String storeStoreName;
+  final bool isPlain;
+  final String customDesignUrl;
+  final String productImageUrl;
 
   CartItemModel({
     required this.cartItemId,
@@ -19,6 +22,9 @@ class CartItemModel {
     required this.price,
     required this.quantity,
     required this.storeStoreName,
+    this.isPlain = true,
+    this.customDesignUrl = '',
+    this.productImageUrl = '',
   });
 
   double get totalPrice => price * quantity;
@@ -34,6 +40,9 @@ class CartItemModel {
       price: (map['price'] ?? 0).toDouble(),
       quantity: map['quantity'] ?? 1,
       storeStoreName: map['storeName'] ?? '',
+      isPlain: map['isPlain'] ?? true,
+      customDesignUrl: map['customDesignUrl'] ?? '',
+      productImageUrl: map['productImageUrl'] ?? '',
     );
   }
 
@@ -47,6 +56,9 @@ class CartItemModel {
       'price': price,
       'quantity': quantity,
       'storeName': storeStoreName,
+      'isPlain': isPlain,
+      'customDesignUrl': customDesignUrl,
+      'productImageUrl': productImageUrl,
     };
   }
 }

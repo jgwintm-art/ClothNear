@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../../models/product_model.dart';
 import '../../../services/product_service.dart';
 import '../../../services/store_service.dart';
+import '../../../services/cloudinary_service.dart';
 
 class AddEditItemScreen extends StatefulWidget {
   final ProductModel? product;
@@ -20,24 +22,27 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
   final _productService = ProductService();
   final _storeService = StoreService();
   bool _isLoading = false;
+  bool _isUploadingImage = false;
 
-  // Selected sizes and colors
   List<String> _selectedSizes = [];
   List<String> _selectedColors = [];
-
-  // Variant prices and stocks
   final Map<String, TextEditingController> _variantPriceControllers = {};
   final Map<String, TextEditingController> _variantStockControllers = {};
 
+  // ✅ NEW: product image and customizable flag
+  String _productImageUrl = '';
+  bool _isCustomizable = false;
+
   final List<String> _availableSizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+
   final List<Map<String, dynamic>> _availableColors = [
-    {'name': 'Black', 'color': Colors.black},
-    {'name': 'White', 'color': Colors.white},
-    {'name': 'Red', 'color': Colors.red},
-    {'name': 'Blue', 'color': Colors.blue},
-    {'name': 'Green', 'color': Colors.green},
-    {'name': 'Gray', 'color': Colors.grey},
-    {'name': 'Yellow', 'color': Colors.yellow},
+    {'name': 'Black', 'color': const Color(0xFF000000)},
+    {'name': 'White', 'color': const Color(0xFFFFFFFF)},
+    {'name': 'Red', 'color': const Color(0xFFFF0000)},
+    {'name': 'Blue', 'color': const Color(0xFF0000FF)},
+    {'name': 'Green', 'color': const Color(0xFF008000)},
+    {'name': 'Gray', 'color': const Color(0xFF808080)},
+    {'name': 'Yellow', 'color': const Color(0xFFFFFF00)},
     {'name': 'Navy', 'color': const Color(0xFF000080)},
   ];
 
@@ -52,13 +57,15 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
       _basePriceController.text = widget.product!.basePrice.toString();
       _selectedSizes = List.from(widget.product!.sizes);
       _selectedColors = List.from(widget.product!.colors);
+      _productImageUrl = widget.product!.imageUrl;
+      _isCustomizable = widget.product!.isCustomizable;
       _initVariantControllers();
     }
   }
 
   void _initVariantControllers() {
-    for (String color in _selectedColors) {
-      for (String size in _selectedSizes) {
+    for (final color in _selectedColors) {
+      for (final size in _selectedSizes) {
         final key = ProductModel.variantKey(color, size);
         final existing = widget.product?.variants[key];
         _variantPriceControllers[key] = TextEditingController(
@@ -72,8 +79,8 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
   }
 
   void _updateVariantControllers() {
-    for (String color in _selectedColors) {
-      for (String size in _selectedSizes) {
+    for (final color in _selectedColors) {
+      for (final size in _selectedSizes) {
         final key = ProductModel.variantKey(color, size);
         if (!_variantPriceControllers.containsKey(key)) {
           _variantPriceControllers[key] = TextEditingController(
@@ -107,6 +114,41 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
     });
   }
 
+  Future<void> _uploadProductImage() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        withData: true,
+      );
+
+      if (result == null) return;
+      setState(() => _isUploadingImage = true);
+
+      final file = result.files.single;
+      String url;
+
+      if (file.path != null) {
+        url = await CloudinaryService.uploadFile(file.path!);
+      } else if (file.bytes != null) {
+        url = await CloudinaryService.uploadBytes(file.bytes!, file.name);
+      } else {
+        throw Exception('Could not read file');
+      }
+
+      setState(() {
+        _productImageUrl = url;
+        _isUploadingImage = false;
+      });
+    } catch (e) {
+      setState(() => _isUploadingImage = false);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Image upload failed: $e')));
+      }
+    }
+  }
+
   Future<void> _saveProduct() async {
     if (_nameController.text.isEmpty ||
         _typeController.text.isEmpty ||
@@ -122,15 +164,13 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // Get store ID
       final ownerUid = FirebaseAuth.instance.currentUser!.uid;
       final store = await _storeService.getStoreByOwner(ownerUid).first;
       if (store == null) throw Exception('Store not found');
 
-      // Build variants map
       Map<String, ProductVariant> variants = {};
-      for (String color in _selectedColors) {
-        for (String size in _selectedSizes) {
+      for (final color in _selectedColors) {
+        for (final size in _selectedSizes) {
           final key = ProductModel.variantKey(color, size);
           variants[key] = ProductVariant(
             price:
@@ -150,6 +190,8 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
         sizes: _selectedSizes,
         basePrice: double.parse(_basePriceController.text),
         variants: variants,
+        imageUrl: _productImageUrl,
+        isCustomizable: _isCustomizable,
       );
 
       if (_isEditing) {
@@ -206,6 +248,112 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ✅ NEW: Product Image Upload Card
+            _buildCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSectionTitle('Product Image'),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Upload a photo of your product',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                  ),
+                  const SizedBox(height: 16),
+                  GestureDetector(
+                    onTap: _isUploadingImage ? null : _uploadProductImage,
+                    child: Container(
+                      width: double.infinity,
+                      height: 180,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[50],
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: _productImageUrl.isNotEmpty
+                              ? Colors.blue[700]!
+                              : Colors.grey.shade300,
+                          style: BorderStyle.solid,
+                        ),
+                      ),
+                      child: _isUploadingImage
+                          ? const Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  CircularProgressIndicator(),
+                                  SizedBox(height: 8),
+                                  Text('Uploading image...'),
+                                ],
+                              ),
+                            )
+                          : _productImageUrl.isNotEmpty
+                          ? Stack(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(11),
+                                  child: Image.network(
+                                    _productImageUrl,
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stack) =>
+                                        _buildImagePlaceholder(),
+                                  ),
+                                ),
+                                Positioned(
+                                  top: 8,
+                                  right: 8,
+                                  child: GestureDetector(
+                                    onTap: () =>
+                                        setState(() => _productImageUrl = ''),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: const BoxDecoration(
+                                        color: Colors.red,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.close,
+                                        color: Colors.white,
+                                        size: 16,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  bottom: 8,
+                                  right: 8,
+                                  child: GestureDetector(
+                                    onTap: _uploadProductImage,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue[700],
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Text(
+                                        'Change Photo',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : _buildImagePlaceholder(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
             // Basic Info Card
             _buildCard(
               child: Column(
@@ -234,6 +382,65 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                     icon: Icons.price_change_outlined,
                     keyboardType: TextInputType.number,
                   ),
+                  const SizedBox(height: 16),
+
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: _isCustomizable
+                          ? Colors.blue[50]
+                          : Colors.grey[50],
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: _isCustomizable
+                            ? Colors.blue[200]!
+                            : Colors.grey.shade200,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.palette_outlined,
+                          color: _isCustomizable
+                              ? Colors.blue[700]
+                              : Colors.grey,
+                          size: 22,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Allow Custom Design',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: _isCustomizable
+                                      ? Colors.blue[700]
+                                      : Colors.grey[700],
+                                ),
+                              ),
+                              Text(
+                                'Customers can upload their own design',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey[500],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Switch(
+                          value: _isCustomizable,
+                          onChanged: (value) =>
+                              setState(() => _isCustomizable = value),
+                          activeThumbColor: Colors.blue[700],
+                          activeTrackColor: Colors.blue[200],
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -248,6 +455,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 8,
+                    runSpacing: 8,
                     children: _availableSizes.map((size) {
                       final isSelected = _selectedSizes.contains(size);
                       return GestureDetector(
@@ -320,8 +528,8 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                                   ? Icon(
                                       Icons.check,
                                       color:
-                                          color == Colors.white ||
-                                              color == Colors.yellow
+                                          colorName == 'White' ||
+                                              colorName == 'Yellow'
                                           ? Colors.black
                                           : Colors.white,
                                       size: 18,
@@ -360,10 +568,12 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                     ),
                     const SizedBox(height: 16),
                     ..._selectedColors.map((color) {
+                      final colorData = _availableColors.firstWhere(
+                        (c) => c['name'] == color,
+                      );
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Color header
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 12,
@@ -379,11 +589,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                                   width: 16,
                                   height: 16,
                                   decoration: BoxDecoration(
-                                    color:
-                                        _availableColors.firstWhere(
-                                              (c) => c['name'] == color,
-                                            )['color']
-                                            as Color,
+                                    color: colorData['color'] as Color,
                                     shape: BoxShape.circle,
                                     border: Border.all(
                                       color: Colors.grey.shade300,
@@ -409,7 +615,6 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                               padding: const EdgeInsets.only(bottom: 8),
                               child: Row(
                                 children: [
-                                  // Size chip
                                   Container(
                                     width: 40,
                                     height: 32,
@@ -431,7 +636,6 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                                     ),
                                   ),
                                   const SizedBox(width: 8),
-                                  // Price field
                                   Expanded(
                                     child: TextField(
                                       controller: _variantPriceControllers[key],
@@ -461,7 +665,6 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                                     ),
                                   ),
                                   const SizedBox(width: 8),
-                                  // Stock field
                                   Expanded(
                                     child: TextField(
                                       controller: _variantStockControllers[key],
@@ -531,6 +734,33 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildImagePlaceholder() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          Icons.add_photo_alternate_outlined,
+          size: 48,
+          color: Colors.grey[400],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Tap to upload product image',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey[600],
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'JPG, PNG recommended',
+          style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+        ),
+      ],
     );
   }
 

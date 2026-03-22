@@ -27,6 +27,7 @@ class ProductModel {
   final Map<String, ProductVariant> variants;
   final List<String> presetDesigns;
   final String imageUrl;
+  final bool isCustomizable;
 
   ProductModel({
     required this.productId,
@@ -39,19 +40,17 @@ class ProductModel {
     required this.variants,
     this.presetDesigns = const [],
     this.imageUrl = '',
+    this.isCustomizable = false,
   });
 
-  // Generate variant key from color and size
   static String variantKey(String color, String size) {
     return '${color.toLowerCase()}_${size.toLowerCase()}';
   }
 
-  // Get variant for specific color and size
   ProductVariant? getVariant(String color, String size) {
     return variants[variantKey(color, size)];
   }
 
-  // Get all available sizes for a specific color
   List<String> availableSizesForColor(String color) {
     return sizes.where((size) {
       final variant = getVariant(color, size);
@@ -59,17 +58,19 @@ class ProductModel {
     }).toList();
   }
 
-  // Get price range for display
   String get priceRange {
-    if (variants.isEmpty) return '₱${basePrice.toStringAsFixed(0)}';
+    if (variants.isEmpty) {
+      return '₱${basePrice.toStringAsFixed(0)}';
+    }
     final prices = variants.values.map((v) => v.price).toList();
     final minPrice = prices.reduce((a, b) => a < b ? a : b);
     final maxPrice = prices.reduce((a, b) => a > b ? a : b);
-    if (minPrice == maxPrice) return '₱${minPrice.toStringAsFixed(0)}';
+    if (minPrice == maxPrice) {
+      return '₱${minPrice.toStringAsFixed(0)}';
+    }
     return '₱${minPrice.toStringAsFixed(0)} - ₱${maxPrice.toStringAsFixed(0)}';
   }
 
-  // Get price range for specific color
   String priceRangeForColor(String color) {
     final colorVariants = variants.entries
         .where((e) => e.key.startsWith(color.toLowerCase()))
@@ -78,12 +79,13 @@ class ProductModel {
     if (colorVariants.isEmpty) return priceRange;
     final minPrice = colorVariants.reduce((a, b) => a < b ? a : b);
     final maxPrice = colorVariants.reduce((a, b) => a > b ? a : b);
-    if (minPrice == maxPrice) return '₱${minPrice.toStringAsFixed(0)}';
+    if (minPrice == maxPrice) {
+      return '₱${minPrice.toStringAsFixed(0)}';
+    }
     return '₱${minPrice.toStringAsFixed(0)} - ₱${maxPrice.toStringAsFixed(0)}';
   }
 
   factory ProductModel.fromMap(Map<String, dynamic> map, String id) {
-    // Parse variants
     Map<String, ProductVariant> variants = {};
     if (map['variants'] != null) {
       (map['variants'] as Map<String, dynamic>).forEach((key, value) {
@@ -102,6 +104,7 @@ class ProductModel {
       variants: variants,
       presetDesigns: List<String>.from(map['presetDesigns'] ?? []),
       imageUrl: map['imageUrl'] ?? '',
+      isCustomizable: map['isCustomizable'] ?? false,
     );
   }
 
@@ -121,6 +124,7 @@ class ProductModel {
       'variants': variantsMap,
       'presetDesigns': presetDesigns,
       'imageUrl': imageUrl,
+      'isCustomizable': isCustomizable,
     };
   }
 }

@@ -413,9 +413,27 @@ class _ManageInventoryScreenState extends State<ManageInventoryScreen> {
                             color: Colors.blue[50],
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Center(
-                            child: Text('👕', style: TextStyle(fontSize: 26)),
-                          ),
+                          child: product.imageUrl.isNotEmpty
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Image.network(
+                                    product.imageUrl,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stack) =>
+                                        const Center(
+                                          child: Text(
+                                            '👕',
+                                            style: TextStyle(fontSize: 28),
+                                          ),
+                                        ),
+                                  ),
+                                )
+                              : const Center(
+                                  child: Text(
+                                    '👕',
+                                    style: TextStyle(fontSize: 28),
+                                  ),
+                                ),
                         ),
                         const SizedBox(width: 12),
 

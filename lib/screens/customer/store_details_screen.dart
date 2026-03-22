@@ -177,151 +177,181 @@ class StoreDetailsScreen extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: Colors.grey.shade200),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Top row: icon + badge
-              Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ✅ UPDATED: show real product image
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(12),
+              ),
+              child: SizedBox(
+                height: 100,
+                width: double.infinity,
+                child: product.imageUrl.isNotEmpty
+                    ? Image.network(
+                        product.imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stack) => Container(
+                          color: Colors.blue[50],
+                          child: const Center(
+                            child: Text('👕', style: TextStyle(fontSize: 40)),
+                          ),
+                        ),
+                      )
+                    : Container(
+                        color: Colors.blue[50],
+                        child: const Center(
+                          child: Text('👕', style: TextStyle(fontSize: 40)),
+                        ),
+                      ),
+              ),
+            ),
+
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Product icon — placeholder for future image
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: Colors.blue[50],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Center(
-                      child: Text('👕', style: TextStyle(fontSize: 18)),
-                    ),
-                  ),
-                  const Spacer(),
-                  // Stock badge
-                  if (hasOutOfStock)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 5,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.red[50],
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.red.shade200),
-                      ),
-                      child: Text(
-                        'Some OOS',
-                        style: TextStyle(
-                          fontSize: 7,
-                          color: Colors.red[700],
-                          fontWeight: FontWeight.w600,
+                  // Name + badges row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          product.name,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    )
-                  else if (hasLowStock)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 5,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.orange[50],
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.orange.shade200),
-                      ),
-                      child: Text(
-                        'Low Stock',
-                        style: TextStyle(
-                          fontSize: 7,
-                          color: Colors.orange[800],
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 6),
-
-              // Product name
-              Text(
-                product.name,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 2),
-
-              // Price
-              Text(
-                product.priceRange,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.blue[700],
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 4),
-
-              // Sizes + Colors in one row
-              Row(
-                children: [
-                  // Size chips
-                  Expanded(
-                    child: Wrap(
-                      spacing: 2,
-                      runSpacing: 2,
-                      children: product.sizes.take(4).map((size) {
-                        return Container(
+                      if (hasOutOfStock)
+                        Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 4,
                             vertical: 1,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.grey[100],
-                            borderRadius: BorderRadius.circular(3),
-                            border: Border.all(color: Colors.grey.shade300),
+                            color: Colors.red[50],
+                            borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            size,
+                            'OOS',
                             style: TextStyle(
-                              fontSize: 8,
-                              color: Colors.grey[700],
+                              fontSize: 7,
+                              color: Colors.red[700],
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        )
+                      else if (hasLowStock)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.orange[50],
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'Low',
+                            style: TextStyle(
+                              fontSize: 7,
+                              color: Colors.orange[800],
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+
+                  // Price
+                  Text(
+                    product.priceRange,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.blue[700],
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+
+                  // Sizes
+                  Wrap(
+                    spacing: 2,
+                    runSpacing: 2,
+                    children: product.sizes.take(4).map((size) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(3),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Text(
+                          size,
+                          style: TextStyle(
+                            fontSize: 8,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 4),
+
+                  // Color dots + customizable badge
+                  Row(
+                    children: [
+                      ...product.colors.take(4).map((colorName) {
+                        return Container(
+                          width: 10,
+                          height: 10,
+                          margin: const EdgeInsets.only(right: 3),
+                          decoration: BoxDecoration(
+                            color: colorMap[colorName] ?? Colors.grey,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.grey.shade300,
+                              width: 0.5,
                             ),
                           ),
                         );
-                      }).toList(),
-                    ),
+                      }),
+                      const Spacer(),
+                      // ✅ NEW: customizable badge
+                      if (product.isCustomizable)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.purple[50],
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'Custom',
+                            style: TextStyle(
+                              fontSize: 7,
+                              color: Colors.purple[700],
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ],
               ),
-              const SizedBox(height: 4),
-
-              // Color dots
-              Row(
-                children: product.colors.take(5).map((colorName) {
-                  return Container(
-                    width: 10,
-                    height: 10,
-                    margin: const EdgeInsets.only(right: 3),
-                    decoration: BoxDecoration(
-                      color: colorMap[colorName] ?? Colors.grey,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.grey.shade300,
-                        width: 0.5,
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
