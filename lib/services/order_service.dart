@@ -54,4 +54,9 @@ class OrderService {
       'status': 'cancelled',
     });
   }
+
+  // Delete a completed/cancelled/rejected order
+  Future<void> deleteOrder(String orderId) async {
+    await _firestore.collection('orders').doc(orderId).delete();
+  }
 }

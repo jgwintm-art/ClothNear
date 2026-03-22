@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../services/store_service.dart';
 import 'owner/register_store_screen.dart';
 import 'owner/inventory/manage_inventory_screen.dart';
+import 'owner/orders/view_orders_screen.dart';
 
 class OwnerHomeScreen extends StatelessWidget {
   const OwnerHomeScreen({super.key});
@@ -174,10 +175,15 @@ class OwnerHomeScreen extends StatelessWidget {
                     context,
                     icon: Icons.receipt_long_outlined,
                     title: 'View Orders',
-                    subtitle: 'Coming in Phase 5',
+                    subtitle: 'View and manage all orders',
                     color: Colors.orange,
-                    isActive: false,
-                    onTap: () {},
+                    isActive: true,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ViewOrdersScreen(),
+                      ),
+                    ),
                   ),
 
                   // Manage Payments — coming soon
