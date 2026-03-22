@@ -54,7 +54,11 @@ class OrderModel {
       designName: map['designName'] ?? '',
       specialInstructions: map['specialInstructions'] ?? '',
       createdAt: map['createdAt'] != null
-          ? (map['createdAt'] as dynamic).toDate()
+          ? map['createdAt'] is int
+                ? DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int)
+                : map['createdAt'] is DateTime
+                ? map['createdAt'] as DateTime
+                : (map['createdAt'] as dynamic).toDate()
           : DateTime.now(),
     );
   }
@@ -75,7 +79,7 @@ class OrderModel {
       'designUrl': designUrl,
       'designName': designName,
       'specialInstructions': specialInstructions,
-      'createdAt': createdAt,
+      'createdAt': createdAt.millisecondsSinceEpoch,
     };
   }
 

@@ -138,19 +138,22 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     );
     await CartService().addToCart(uid, cartItem);
     if (mounted) {
+      ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Added to cart!'),
-          // ✅ FIXED: added dismiss action so snackbar can be closed
           action: SnackBarAction(
             label: 'View Cart',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const CartScreen()),
-            ),
+            onPressed: () {
+              ScaffoldMessenger.of(context).clearSnackBars();
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const CartScreen()),
+              );
+            },
           ),
-          // ✅ FIXED: snackbar auto dismisses after 3 seconds
           duration: const Duration(seconds: 3),
+          dismissDirection: DismissDirection.horizontal,
         ),
       );
     }

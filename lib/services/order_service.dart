@@ -15,13 +15,15 @@ class OrderService {
     return _firestore
         .collection('orders')
         .where('customerUid', isEqualTo: customerUid)
-        .orderBy('createdAt', descending: true)
         .snapshots()
-        .map(
-          (snapshot) => snapshot.docs
+        .map((snapshot) {
+          final orders = snapshot.docs
               .map((doc) => OrderModel.fromMap(doc.data(), doc.id))
-              .toList(),
-        );
+              .toList();
+          // Sort locally to avoid needing a Firestore index
+          orders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return orders;
+        });
   }
 
   // Get orders for a store
@@ -29,13 +31,14 @@ class OrderService {
     return _firestore
         .collection('orders')
         .where('storeId', isEqualTo: storeId)
-        .orderBy('createdAt', descending: true)
         .snapshots()
-        .map(
-          (snapshot) => snapshot.docs
+        .map((snapshot) {
+          final orders = snapshot.docs
               .map((doc) => OrderModel.fromMap(doc.data(), doc.id))
-              .toList(),
-        );
+              .toList();
+          orders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return orders;
+        });
   }
 
   // Update order status
