@@ -127,12 +127,12 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
       final file = result.files.single;
       String url;
 
-      if (file.path != null) {
-        url = await CloudinaryService.uploadFile(file.path!);
-      } else if (file.bytes != null) {
+      if (file.bytes != null && file.bytes!.isNotEmpty) {
         url = await CloudinaryService.uploadBytes(file.bytes!, file.name);
+      } else if (file.path != null && file.path!.isNotEmpty) {
+        url = await CloudinaryService.uploadFile(file.path!);
       } else {
-        throw Exception('Could not read file');
+        throw Exception('Could not read file — please try again');
       }
 
       setState(() {
