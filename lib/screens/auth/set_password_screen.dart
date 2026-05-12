@@ -13,16 +13,19 @@ class SetPasswordScreen extends StatefulWidget {
 
 class _SetPasswordScreenState extends State<SetPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _currentPasswordController = TextEditingController(); // temp password
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
   final _authService = AuthService();
 
+  bool _showCurrent = false;
   bool _showPassword = false;
   bool _showConfirm = false;
   bool _isLoading = false;
 
   @override
   void dispose() {
+    _currentPasswordController.dispose();
     _passwordController.dispose();
     _confirmController.dispose();
     super.dispose();
@@ -32,8 +35,12 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
     try {
-      // Update Firebase Auth password
-      await _authService.setNewPassword(_passwordController.text.trim());
+      // Re-authenticate with the temporary password before updating.
+      // This prevents [requires-recent-login] Firebase errors.
+      await _authService.setNewPassword(
+        _passwordController.text.trim(),
+        currentPassword: _currentPasswordController.text.trim(),
+      );
       // Mark firstLogin complete in Firestore (both /users and /stores/workers)
       await _authService.completeFirstLogin(
         widget.worker.uid,
@@ -108,6 +115,38 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
                     ),
                   ),
                   const SizedBox(height: 32),
+
+                  // Current (temporary) password field
+                  TextFormField(
+                    controller: _currentPasswordController,
+                    obscureText: !_showCurrent,
+                    decoration: InputDecoration(
+                      labelText: 'Current (Temporary) Password',
+                      hintText: 'Enter the password given to you',
+                      prefixIcon: const Icon(Icons.lock_clock_outlined),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _showCurrent
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                        ),
+                        onPressed: () =>
+                            setState(() => _showCurrent = !_showCurrent),
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter your temporary password.';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
 
                   // New password field
                   TextFormField(

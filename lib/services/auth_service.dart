@@ -134,25 +134,54 @@ class AuthService {
   }
 
   // ─── SET PASSWORD (used by worker on first login) ────────────────────────────
+  // Pass [currentPassword] to re-authenticate before updating.
+  // Firebase requires recent auth; without this the call throws
+  // requires-recent-login, which surfaces as a rule error in the UI.
 
-  Future<void> setNewPassword(String newPassword) async {
+  Future<void> setNewPassword(
+    String newPassword, {
+    String? currentPassword,
+  }) async {
     final user = _auth.currentUser;
     if (user == null) throw Exception('No user is currently logged in.');
+
+    if (currentPassword != null && user.email != null) {
+      final credential = EmailAuthProvider.credential(
+        email: user.email!,
+        password: currentPassword,
+      );
+      await user.reauthenticateWithCredential(credential);
+    }
+
     await user.updatePassword(newPassword);
   }
 
   // ─── MARK FIRST LOGIN COMPLETE ───────────────────────────────────────────────
+  // The Firestore rule for stores/{storeId}/workers/{workerId} only has
+  // `allow create`. Using set() with SetOptions(merge: true) writes the field
+  // whether or not the document already exists, which satisfies the create rule
+  // and avoids the [PERMISSION_DENIED] error that .update() triggers.
 
   Future<void> completeFirstLogin(String uid, String storeId) async {
-    // Update /users/{uid}
-    await _firestore.collection('users').doc(uid).update({'firstLogin': false});
-    // Update /stores/{storeId}/workers/{uid}
-    await _firestore
-        .collection('stores')
-        .doc(storeId)
-        .collection('workers')
-        .doc(uid)
-        .update({'firstLogin': false});
+    final batch = _firestore.batch();
+
+    // /users/{uid} — the worker can update their own document (rule allows it)
+    batch.update(_firestore.collection('users').doc(uid), {
+      'firstLogin': false,
+    });
+
+    // /stores/{storeId}/workers/{uid} — use set+merge to satisfy `allow create` rule
+    batch.set(
+      _firestore
+          .collection('stores')
+          .doc(storeId)
+          .collection('workers')
+          .doc(uid),
+      {'firstLogin': false},
+      SetOptions(merge: true),
+    );
+
+    await batch.commit();
   }
 
   // ─── LOGOUT ──────────────────────────────────────────────────────────────────

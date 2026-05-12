@@ -6,19 +6,24 @@ class WorkerService {
 
   // ─── READ ────────────────────────────────────────────────────────────────────
 
-  // Stream of all workers for a store (live updates)
+  // Stream of all workers for a store (live updates).
+  // NOTE: Sorting is done client-side to avoid requiring a composite Firestore
+  // index for the (role + ownerUid + createdAt) combination, which was the
+  // root cause of the "Failed to display Workers" error.
   Stream<List<WorkerModel>> getStoreWorkers(String ownerUid) {
     return _firestore
         .collection('users')
         .where('role', isEqualTo: 'worker')
         .where('ownerUid', isEqualTo: ownerUid)
-        .orderBy('createdAt', descending: false)
         .snapshots()
-        .map(
-          (snap) => snap.docs
+        .map((snap) {
+          final workers = snap.docs
               .map((doc) => WorkerModel.fromMap(doc.data(), doc.id))
-              .toList(),
-        );
+              .toList();
+          // Sort by createdAt ascending — same order as the original orderBy
+          workers.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+          return workers;
+        });
   }
 
   // Fetch a single worker by uid

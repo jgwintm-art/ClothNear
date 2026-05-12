@@ -14,6 +14,8 @@ class ForcePasswordChangeScreen extends StatefulWidget {
 
 class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _currentPasswordController =
+      TextEditingController(); // temp/current password
   final _passwordController = TextEditingController();
   final _authService = AuthService();
   bool _loading = false;
@@ -24,7 +26,12 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
     setState(() => _loading = true);
 
     try {
-      await _authService.setNewPassword(_passwordController.text);
+      // Re-authenticate with the current (temporary) password before updating.
+      // This prevents the [requires-recent-login] Firebase error.
+      await _authService.setNewPassword(
+        _passwordController.text,
+        currentPassword: _currentPasswordController.text,
+      );
 
       // Use ! to assert non-null values
       await _authService.completeFirstLogin(
@@ -60,6 +67,16 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
               ),
               const SizedBox(height: 20),
               TextFormField(
+                controller: _currentPasswordController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Current (Temporary) Password',
+                ),
+                validator: (val) =>
+                    val != null && val.isNotEmpty ? null : 'Required',
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
                 controller: _passwordController,
                 obscureText: true,
                 decoration: const InputDecoration(labelText: 'New Password'),
@@ -82,6 +99,7 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
 
   @override
   void dispose() {
+    _currentPasswordController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
