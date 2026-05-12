@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../../../models/worker_model.dart';
-import '../../../../services/worker_service.dart';
+import 'package:clothnear/models/worker_model.dart';
+import 'package:clothnear/services/worker_service.dart';
+
 import 'create_worker_sheet.dart';
 import 'worker_detail_screen.dart';
 

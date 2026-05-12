@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../../models/worker_model.dart';
-import '../../../../services/worker_service.dart';
+import 'package:clothnear/models/worker_model.dart';
+import 'package:clothnear/services/worker_service.dart';
 
 class WorkerDetailScreen extends StatefulWidget {
   final WorkerModel worker;
