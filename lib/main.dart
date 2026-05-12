@@ -6,6 +6,8 @@ import 'screens/auth/login_screen.dart';
 import 'screens/customer_home_screen.dart';
 import 'screens/owner_home_screen.dart';
 import 'screens/worker_home_screen.dart';
+import 'models/user_model.dart';
+import 'screens/force_password_change_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,6 +30,10 @@ class MyApp extends StatelessWidget {
       ),
       initialRoute: '/',
       routes: {
+        '/worker-set-password': (context) {
+          final user = ModalRoute.of(context)!.settings.arguments as UserModel;
+          return ForcePasswordChangeScreen(user);
+        },
         '/': (context) => const LoginScreen(),
         '/customer-home': (context) => const CustomerHomeScreen(),
         '/owner-home': (context) => const OwnerHomeScreen(),
