@@ -54,6 +54,8 @@ class _ManageWorkerScreenState extends State<ManageWorkerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final ownerUid = FirebaseAuth.instance.currentUser!.uid;
+
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
@@ -69,8 +71,9 @@ class _ManageWorkerScreenState extends State<ManageWorkerScreen> {
         icon: const Icon(Icons.person_add_rounded),
         label: const Text('Add Worker'),
       ),
+
       body: StreamBuilder<List<WorkerModel>>(
-        stream: _workerService.getStoreWorkers(widget.storeId),
+        stream: _workerService.getStoreWorkers(ownerUid),
         builder: (context, snapshot) {
           // Loading
           if (snapshot.connectionState == ConnectionState.waiting) {

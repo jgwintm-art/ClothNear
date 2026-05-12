@@ -101,10 +101,11 @@ class AuthService {
         firstLogin: true, // forces password change on first login
         permissions: permissions,
       );
-      await _firestore
-          .collection('users')
-          .doc(workerUid)
-          .set(workerUserModel.toMap());
+      await _firestore.collection('users').doc(workerUid).set({
+        ...workerUserModel.toMap(),
+        'ownerUid': ownerUid,
+        'createdAt': DateTime.now().millisecondsSinceEpoch,
+      });
 
       // Step 6: Write to the store's workers subcollection for easy store-scoped queries
       await _firestore
@@ -122,6 +123,7 @@ class AuthService {
             'permissions': permissions,
             'createdAt': DateTime.now().millisecondsSinceEpoch,
             'createdBy': ownerUid,
+            'ownerUid': ownerUid,
           });
 
       return workerUserModel;

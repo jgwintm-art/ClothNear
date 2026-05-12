@@ -7,11 +7,11 @@ class WorkerService {
   // ─── READ ────────────────────────────────────────────────────────────────────
 
   // Stream of all workers for a store (live updates)
-  Stream<List<WorkerModel>> getStoreWorkers(String storeId) {
+  Stream<List<WorkerModel>> getStoreWorkers(String ownerUid) {
     return _firestore
-        .collection('stores')
-        .doc(storeId)
-        .collection('workers')
+        .collection('users')
+        .where('role', isEqualTo: 'worker')
+        .where('ownerUid', isEqualTo: ownerUid)
         .orderBy('createdAt', descending: false)
         .snapshots()
         .map(
