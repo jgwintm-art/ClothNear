@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import 'register_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -16,41 +17,68 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
 
-  void _login() async {
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill in all fields')),
-      );
-      return;
-    }
-
+  Future<void> _login() async {
     setState(() => _isLoading = true);
-
     try {
       final user = await _authService.login(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
+        _emailController.text,
+        _passwordController.text,
       );
 
-      if (user != null && mounted) {
-        // Redirect based on role
-        if (user.role == 'customer') {
-          Navigator.pushReplacementNamed(context, '/customer-home');
-        } else if (user.role == 'owner') {
-          Navigator.pushReplacementNamed(context, '/owner-home');
-        } else if (user.role == 'worker') {
+      if (user == null) {
+        throw Exception('Account not found. Please try again.');
+      }
+
+      if (!user.isActive) {
+        await _authService.logout();
+        throw Exception(
+          'Your account has been deactivated. Please contact your store owner.',
+        );
+      }
+
+      if (!mounted) return;
+
+      if (user.role == 'customer') {
+        Navigator.pushReplacementNamed(context, '/customer-home');
+      } else if (user.role == 'owner') {
+        Navigator.pushReplacementNamed(context, '/owner-home');
+      } else if (user.role == 'worker') {
+        // If firstLogin is true, redirect to set-password screen first
+        if (user.firstLogin) {
+          Navigator.pushReplacementNamed(
+            context,
+            '/worker-set-password',
+            arguments: user, // pass the UserModel
+          );
+        } else {
           Navigator.pushReplacementNamed(context, '/worker-home');
         }
       }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Login failed: ${e.toString()}')),
-        );
+    } on FirebaseAuthException catch (e) {
+      String message = 'Login failed. Please check your credentials.';
+      if (e.code == 'user-not-found') {
+        message = 'No account found for this email.';
       }
+      if (e.code == 'wrong-password') message = 'Incorrect password.';
+      if (e.code == 'invalid-email') message = 'Invalid email address.';
+      if (e.code == 'too-many-requests') {
+        message = 'Too many attempts. Try again later.';
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: Colors.red[700]),
+      );
+    } on Exception catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceAll('Exception: ', '')),
+          backgroundColor: Colors.red[700],
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
-
-    setState(() => _isLoading = false);
   }
 
   @override

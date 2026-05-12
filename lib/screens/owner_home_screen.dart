@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
 import '../services/store_service.dart';
+
 import 'owner/register_store_screen.dart';
 import 'owner/inventory/manage_inventory_screen.dart';
 import 'owner/orders/view_orders_screen.dart';
+import 'owner/workers/manage_worker_screen.dart';
 
 class OwnerHomeScreen extends StatelessWidget {
   const OwnerHomeScreen({super.key});
@@ -42,6 +45,7 @@ class OwnerHomeScreen extends StatelessWidget {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
+
           if (snapshot.data == null) {
             return Center(
               child: Column(
@@ -60,12 +64,14 @@ class OwnerHomeScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 24),
                   ElevatedButton(
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const RegisterStoreScreen(),
-                      ),
-                    ),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const RegisterStoreScreen(),
+                        ),
+                      );
+                    },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blue[700],
                       padding: const EdgeInsets.symmetric(
@@ -87,13 +93,14 @@ class OwnerHomeScreen extends StatelessWidget {
           }
 
           final store = snapshot.data!;
+
           return SingleChildScrollView(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Welcome header
+                  // Welcome Header
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
@@ -143,7 +150,7 @@ class OwnerHomeScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 24),
 
-                  // Dashboard menu
+                  // Dashboard Menu
                   Text(
                     'Manage Your Store',
                     style: TextStyle(
@@ -154,7 +161,7 @@ class OwnerHomeScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
 
-                  // Manage Inventory — ACTIVE
+                  // Manage Inventory
                   _buildMenuItem(
                     context,
                     icon: Icons.inventory_2_outlined,
@@ -162,15 +169,17 @@ class OwnerHomeScreen extends StatelessWidget {
                     subtitle: 'Add and manage your products',
                     color: Colors.blue,
                     isActive: true,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ManageInventoryScreen(),
-                      ),
-                    ),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ManageInventoryScreen(),
+                        ),
+                      );
+                    },
                   ),
 
-                  // View Orders — coming soon
+                  // View Orders
                   _buildMenuItem(
                     context,
                     icon: Icons.receipt_long_outlined,
@@ -178,15 +187,36 @@ class OwnerHomeScreen extends StatelessWidget {
                     subtitle: 'View and manage all orders',
                     color: Colors.orange,
                     isActive: true,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ViewOrdersScreen(),
-                      ),
-                    ),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ViewOrdersScreen(),
+                        ),
+                      );
+                    },
                   ),
 
-                  // Manage Payments — coming soon
+                  // Manage Workers
+                  _buildMenuItem(
+                    context,
+                    icon: Icons.people_alt_outlined,
+                    title: 'Manage Workers',
+                    subtitle: 'Add and manage store workers',
+                    color: Colors.teal,
+                    isActive: true,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              ManageWorkerScreen(storeId: store.storeId),
+                        ),
+                      );
+                    },
+                  ),
+
+                  // Manage Payments
                   _buildMenuItem(
                     context,
                     icon: Icons.payments_outlined,
@@ -197,7 +227,7 @@ class OwnerHomeScreen extends StatelessWidget {
                     onTap: () {},
                   ),
 
-                  // Manage Pricing — coming soon
+                  // Manage Pricing
                   _buildMenuItem(
                     context,
                     icon: Icons.price_change_outlined,
@@ -208,7 +238,7 @@ class OwnerHomeScreen extends StatelessWidget {
                     onTap: () {},
                   ),
 
-                  // AI Analytics — coming soon
+                  // AI Analytics
                   _buildMenuItem(
                     context,
                     icon: Icons.analytics_outlined,

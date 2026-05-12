@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../services/order_service.dart';
-import '../services/store_service.dart';
-import '../models/order_model.dart';
-import 'owner/orders/order_details_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/user_model.dart';
+import '../models/store_model.dart';
+import '../services/auth_service.dart';
 
 class WorkerHomeScreen extends StatefulWidget {
   const WorkerHomeScreen({super.key});
@@ -13,569 +13,341 @@ class WorkerHomeScreen extends StatefulWidget {
 }
 
 class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
-  final _orderService = OrderService();
-  final _storeService = StoreService();
-  String? _storeId;
-  String? _storeName;
+  final _authService = AuthService();
+  final _firestore = FirebaseFirestore.instance;
+
+  UserModel? _worker;
+  StoreModel? _store;
+  bool _isLoading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _loadStore();
+    _loadWorkerData();
   }
 
-  Future<void> _loadStore() async {
-    // Workers are linked to a store via their uid
-    // For now we load the first active store
-    // In a real app owners would assign workers to stores
-    final uid = FirebaseAuth.instance.currentUser!.uid;
-    final store = await _storeService.getStoreByOwner(uid).first;
-    if (store != null && mounted) {
+  Future<void> _loadWorkerData() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) throw Exception('Not logged in.');
+
+      // Step 1: Load worker's user document — contains storeId
+      final userDoc = await _firestore.collection('users').doc(uid).get();
+      if (!userDoc.exists) throw Exception('Worker account not found.');
+
+      final worker = UserModel.fromMap(userDoc.data()!);
+
+      // Step 2: Verify account is active
+      if (!worker.isActive) {
+        await _authService.logout();
+        if (!mounted) return;
+        Navigator.pushReplacementNamed(context, '/');
+        return;
+      }
+
+      // Step 3: Load the store using storeId from the worker doc (NOT ownerUid)
+      if (worker.storeId == null) {
+        throw Exception('Worker is not assigned to any store.');
+      }
+
+      final storeDoc = await _firestore
+          .collection('stores')
+          .doc(worker.storeId)
+          .get();
+      if (!storeDoc.exists) throw Exception('Assigned store not found.');
+
+      final storeData = storeDoc.data()!;
+      final store = StoreModel.fromMap(storeData, storeDoc.id);
+
       setState(() {
-        _storeId = store.storeId;
-        _storeName = store.storeName;
+        _worker = worker;
+        _store = store;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString().replaceAll('Exception: ', '');
+        _isLoading = false;
       });
     }
   }
 
+  Future<void> _logout() async {
+    await _authService.logout();
+    if (!mounted) return;
+    Navigator.pushReplacementNamed(context, '/');
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    if (_error != null) {
+      return Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, size: 60, color: Colors.red[300]),
+                const SizedBox(height: 16),
+                Text(
+                  _error!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey[700]),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: _logout,
+                  child: const Text('Back to Login'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final worker = _worker!;
+    final store = _store!;
+    final permissions = worker.permissions;
+
+    // Build only the menu items the worker has permission for
+    final menuItems = <_WorkerMenuItem>[];
+
+    if (permissions['canUpdateOrderStatus'] == true) {
+      menuItems.add(
+        _WorkerMenuItem(
+          icon: Icons.receipt_long_outlined,
+          label: 'View Orders',
+          color: Colors.blue[700]!,
+          onTap: () {
+            // Navigate to your existing ViewOrdersScreen
+            // Navigator.push(context, MaterialPageRoute(
+            //   builder: (_) => ViewOrdersScreen(storeId: store.storeId),
+            // ));
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Navigate to View Orders')),
+            );
+          },
+        ),
+      );
+    }
+
+    if (permissions['canConfirmPayments'] == true) {
+      menuItems.add(
+        _WorkerMenuItem(
+          icon: Icons.payments_outlined,
+          label: 'Manage Payments',
+          color: Colors.green[700]!,
+          onTap: () {
+            // Navigate to your existing ManagePaymentsScreen
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Navigate to Manage Payments')),
+            );
+          },
+        ),
+      );
+    }
+
+    if (permissions['canViewInventory'] == true) {
+      menuItems.add(
+        _WorkerMenuItem(
+          icon: Icons.inventory_2_outlined,
+          label: 'View Inventory',
+          color: Colors.orange[700]!,
+          onTap: () {
+            // Navigate to your existing inventory view screen
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Navigate to Inventory')),
+            );
+          },
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.blue[700],
+        foregroundColor: Colors.white,
         elevation: 0,
-        title: Text(
-          'Worker Dashboard',
-          style: TextStyle(
-            color: Colors.blue[700],
-            fontWeight: FontWeight.bold,
-          ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Worker Dashboard',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            Text(
+              store.storeName,
+              style: const TextStyle(fontSize: 12, color: Colors.white70),
+            ),
+          ],
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.logout, color: Colors.blue[700]),
-            onPressed: () async {
-              await FirebaseAuth.instance.signOut();
-              if (context.mounted) {
-                Navigator.pushReplacementNamed(context, '/');
-              }
-            },
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
+            onPressed: _logout,
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Welcome card
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.blue[700],
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Welcome, Worker!',
-                    style: TextStyle(fontSize: 13, color: Colors.blue[100]),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _storeName ?? 'Loading store...',
+      body: Column(
+        children: [
+          // Worker greeting banner
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            color: Colors.blue[700],
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 22,
+                  backgroundColor: Colors.white24,
+                  child: Text(
+                    worker.name.isNotEmpty ? worker.name[0].toUpperCase() : '?',
                     style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
                       color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
                     ),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Stats
-            if (_storeId != null)
-              StreamBuilder<List<OrderModel>>(
-                stream: _orderService.getStoreOrders(_storeId!),
-                builder: (context, snapshot) {
-                  final orders = snapshot.data ?? [];
-                  final processingCount = orders
-                      .where((o) => o.status == 'processing')
-                      .length;
-                  final readyCount = orders
-                      .where((o) => o.status == 'ready')
-                      .length;
-                  final activeCount = orders
-                      .where(
-                        (o) =>
-                            o.status != 'completed' &&
-                            o.status != 'cancelled' &&
-                            o.status != 'rejected',
-                      )
-                      .length;
-
-                  return Row(
-                    children: [
-                      _buildStatCard(
-                        'Processing',
-                        processingCount.toString(),
-                        Colors.blue,
-                        Colors.blue[50]!,
-                      ),
-                      const SizedBox(width: 8),
-                      _buildStatCard(
-                        'Ready',
-                        readyCount.toString(),
-                        Colors.green,
-                        Colors.green[50]!,
-                      ),
-                      const SizedBox(width: 8),
-                      _buildStatCard(
-                        'Active',
-                        activeCount.toString(),
-                        Colors.orange,
-                        Colors.orange[50]!,
-                      ),
-                    ],
-                  );
-                },
-              ),
-            const SizedBox(height: 20),
-
-            // Menu items
-            Text(
-              'Quick Actions',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[700],
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            _buildMenuItem(
-              Icons.receipt_long_outlined,
-              'View Orders',
-              'See and update processing orders',
-              Colors.blue,
-              () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => _WorkerOrdersScreen(storeId: _storeId),
                 ),
-              ),
-            ),
-
-            _buildMenuItem(
-              Icons.payments_outlined,
-              'Manage Payments',
-              'Coming in Phase 6',
-              Colors.grey,
-              null,
-              comingSoon: true,
-            ),
-
-            const SizedBox(height: 20),
-
-            // Recent active orders
-            if (_storeId != null) ...[
-              Text(
-                'Active Orders',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[700],
-                ),
-              ),
-              const SizedBox(height: 12),
-              StreamBuilder<List<OrderModel>>(
-                stream: _orderService.getStoreOrders(_storeId!),
-                builder: (context, snapshot) {
-                  final orders = (snapshot.data ?? [])
-                      .where(
-                        (o) => o.status == 'processing' || o.status == 'ready',
-                      )
-                      .take(3)
-                      .toList();
-
-                  if (orders.isEmpty) {
-                    return Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Hello, ${worker.name.split(' ').first}!',
+                      style: const TextStyle(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade200),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
                       ),
-                      child: Center(
-                        child: Text(
-                          'No active orders',
-                          style: TextStyle(color: Colors.grey[400]),
+                    ),
+                    Text(
+                      '${menuItems.length} feature${menuItems.length != 1 ? 's' : ''} available',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Menu items or no-access state
+          Expanded(
+            child: menuItems.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.lock_outline,
+                          size: 64,
+                          color: Colors.grey[300],
                         ),
-                      ),
-                    );
-                  }
-
-                  return Column(
-                    children: orders
-                        .map((order) => _buildActiveOrderCard(order))
-                        .toList(),
-                  );
-                },
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatCard(
-    String label,
-    String value,
-    Color textColor,
-    Color bgColor,
-  ) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Column(
-          children: [
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: textColor,
-              ),
-            ),
-            Text(
-              label,
-              style: TextStyle(fontSize: 10, color: Colors.grey[600]),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMenuItem(
-    IconData icon,
-    String title,
-    String subtitle,
-    Color color,
-    VoidCallback? onTap, {
-    bool comingSoon = false,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade200),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                icon,
-                color: comingSoon ? Colors.grey : color,
-                size: 22,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: comingSoon ? Colors.grey[500] : Colors.black,
-                    ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                  ),
-                ],
-              ),
-            ),
-            comingSoon
-                ? Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[200],
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      'Soon',
-                      style: TextStyle(fontSize: 9, color: Colors.grey[500]),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No features available.',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Your store owner has not granted\nany permissions to your account yet.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.grey[500],
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
                     ),
                   )
-                : Icon(
-                    Icons.arrow_forward_ios,
-                    size: 14,
-                    color: Colors.grey[400],
+                : GridView.count(
+                    crossAxisCount: 2,
+                    padding: const EdgeInsets.all(20),
+                    crossAxisSpacing: 14,
+                    mainAxisSpacing: 14,
+                    children: menuItems
+                        .map((item) => _WorkerMenuCard(item: item))
+                        .toList(),
                   ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildActiveOrderCard(OrderModel order) {
-    final isReady = order.status == 'ready';
-    return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) =>
-              OrderDetailsScreen(order: order, isOwner: false),
-        ),
-      ),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isReady ? Colors.green.shade200 : Colors.blue.shade200,
           ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 4,
-              height: 50,
-              decoration: BoxDecoration(
-                color: isReady ? Colors.green[700] : Colors.blue[700],
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Order #${order.orderId.substring(0, 6).toUpperCase()}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    '${order.items.length} item${order.items.length > 1 ? 's' : ''}  •  ${order.orderType}',
-                    style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: isReady ? Colors.green[50] : Colors.blue[50],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                isReady ? 'Ready' : 'Processing',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: isReady ? Colors.green[700] : Colors.blue[700],
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
 }
 
-// Worker-specific orders view (no approve/reject/cancel)
-class _WorkerOrdersScreen extends StatelessWidget {
-  final String? storeId;
+class _WorkerMenuItem {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
 
-  const _WorkerOrdersScreen({required this.storeId});
+  const _WorkerMenuItem({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+}
+
+class _WorkerMenuCard extends StatelessWidget {
+  final _WorkerMenuItem item;
+
+  const _WorkerMenuCard({required this.item});
 
   @override
   Widget build(BuildContext context) {
-    final orderService = OrderService();
-
-    return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Colors.blue[700]),
-          onPressed: () => Navigator.pop(context),
+    return GestureDetector(
+      onTap: item.onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey[200]!),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 10),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
-        title: Text(
-          'Orders',
-          style: TextStyle(
-            color: Colors.blue[700],
-            fontWeight: FontWeight.bold,
-          ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: item.color.withValues(alpha: 25),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(item.icon, color: item.color, size: 32),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              item.label,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            ),
+          ],
         ),
       ),
-      body: storeId == null
-          ? const Center(child: CircularProgressIndicator())
-          : StreamBuilder<List<OrderModel>>(
-              stream: orderService.getStoreOrders(storeId!),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                final orders = (snapshot.data ?? [])
-                    .where(
-                      (o) => o.status == 'processing' || o.status == 'ready',
-                    )
-                    .toList();
-
-                if (orders.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.receipt_long_outlined,
-                          size: 64,
-                          color: Colors.grey[300],
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'No active orders',
-                          style: TextStyle(
-                            color: Colors.grey[500],
-                            fontSize: 16,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: orders.length,
-                  itemBuilder: (context, index) {
-                    final order = orders[index];
-                    return GestureDetector(
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              OrderDetailsScreen(order: order, isOwner: false),
-                        ),
-                      ),
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.shade200),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 4,
-                              height: 60,
-                              decoration: BoxDecoration(
-                                color: order.status == 'ready'
-                                    ? Colors.green[700]
-                                    : Colors.blue[700],
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Order #${order.orderId.substring(0, 6).toUpperCase()}',
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  Text(
-                                    '${order.items.length} items  •  ${order.orderType}',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey[500],
-                                    ),
-                                  ),
-                                  Text(
-                                    '₱${order.totalPrice.toStringAsFixed(0)}',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.red[600],
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: order.status == 'ready'
-                                    ? Colors.green[50]
-                                    : Colors.blue[50],
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                order.status == 'ready'
-                                    ? 'Ready'
-                                    : 'Processing',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: order.status == 'ready'
-                                      ? Colors.green[700]
-                                      : Colors.blue[700],
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
     );
   }
 }
