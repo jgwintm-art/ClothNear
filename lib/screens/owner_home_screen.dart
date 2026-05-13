@@ -7,6 +7,7 @@ import 'owner/register_store_screen.dart';
 import 'owner/inventory/manage_inventory_screen.dart';
 import 'owner/orders/view_orders_screen.dart';
 import 'owner/workers/manage_worker_screen.dart';
+import 'owner/pricing/manage_pricing_screen.dart';
 
 class OwnerHomeScreen extends StatelessWidget {
   const OwnerHomeScreen({super.key});
@@ -232,10 +233,17 @@ class OwnerHomeScreen extends StatelessWidget {
                     context,
                     icon: Icons.price_change_outlined,
                     title: 'Manage Pricing',
-                    subtitle: 'Coming in Phase 7',
+                    subtitle: 'Edit prices for all products',
                     color: Colors.purple,
-                    isActive: false,
-                    onTap: () {},
+                    isActive: true,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ManagePricingScreen(),
+                        ),
+                      );
+                    },
                   ),
 
                   // AI Analytics
