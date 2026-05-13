@@ -33,6 +33,8 @@ firebase.rules
 .pub/
 /build/
 /coverage/
+/build
+.firebase/
 
 # Symbolication related
 app.*.symbols
