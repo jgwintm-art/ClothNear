@@ -30,9 +30,4 @@ jobs:
         run: flutter build web
 
       - name: Deploy to Firebase
-        uses: FirebaseExtended/action-hosting-deploy@v0
-        with:
-          repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_TOKEN }}
-          projectId: clothnear # ← replace this
-          channelId: live
+        run: npx firebase-tools deploy --only hosting --project clothnear --token "${{ secrets.FIREBASE_TOKEN }}"
