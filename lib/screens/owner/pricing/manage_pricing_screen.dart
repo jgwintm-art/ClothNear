@@ -97,7 +97,7 @@ class _ManagePricingScreenState extends State<ManagePricingScreen> {
                   padding: const EdgeInsets.all(16),
                   itemCount: products.length,
                   // FIX: use __ for second unused parameter (avoids linter warning)
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  separatorBuilder: (_, _) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     return _ProductPricingCard(
                       product: products[index],
@@ -281,14 +281,7 @@ class _ProductPricingCardState extends State<_ProductPricingCard> {
     ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: bg));
   }
 
-  String _formatVariantLabel(String key) {
-    final parts = key.split('_');
-    if (parts.length < 2) return key.toUpperCase();
-    final color =
-        parts[0][0].toUpperCase() + parts[0].substring(1).toLowerCase();
-    final size = parts[1].toUpperCase();
-    return '$color — $size';
-  }
+
 
   // ── Build ──────────────────────────────────────────────────────────────────
 
@@ -326,7 +319,7 @@ class _ProductPricingCardState extends State<_ProductPricingCard> {
                               widget.product.imageUrl,
                               fit: BoxFit.cover,
                               // FIX: use __ for second unused parameter
-                              errorBuilder: (_, __, ___) => Icon(
+                              errorBuilder: (_, _, _) => Icon(
                                 Icons.checkroom_outlined,
                                 color: Colors.purple[300],
                               ),

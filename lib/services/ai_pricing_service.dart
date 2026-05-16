@@ -108,7 +108,7 @@ Use the exact variant keys from the list above. Give realistic Philippine peso r
       final jsonStart = clean.indexOf('{');
       final jsonEnd = clean.lastIndexOf('}');
       if (jsonStart == -1 || jsonEnd == -1)
-        throw Exception('No JSON in response');
+        {throw Exception('No JSON in response');}
       final jsonStr = clean.substring(jsonStart, jsonEnd + 1);
 
       final result = <String, String>{};
