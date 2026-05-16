@@ -8,6 +8,7 @@ import 'owner/inventory/manage_inventory_screen.dart';
 import 'owner/orders/view_orders_screen.dart';
 import 'owner/workers/manage_worker_screen.dart';
 import 'owner/pricing/manage_pricing_screen.dart';
+import 'shared/manage_payments_screen.dart';
 
 class OwnerHomeScreen extends StatelessWidget {
   const OwnerHomeScreen({super.key});
@@ -65,14 +66,12 @@ class OwnerHomeScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 24),
                   ElevatedButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const RegisterStoreScreen(),
-                        ),
-                      );
-                    },
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const RegisterStoreScreen(),
+                      ),
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blue[700],
                       padding: const EdgeInsets.symmetric(
@@ -101,7 +100,7 @@ class OwnerHomeScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Welcome Header
+                  // Welcome header
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
@@ -151,7 +150,6 @@ class OwnerHomeScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 24),
 
-                  // Dashboard Menu
                   Text(
                     'Manage Your Store',
                     style: TextStyle(
@@ -162,7 +160,7 @@ class OwnerHomeScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
 
-                  // Manage Inventory
+                  // ── Manage Inventory ────────────────────────────────────
                   _buildMenuItem(
                     context,
                     icon: Icons.inventory_2_outlined,
@@ -170,17 +168,15 @@ class OwnerHomeScreen extends StatelessWidget {
                     subtitle: 'Add and manage your products',
                     color: Colors.blue,
                     isActive: true,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const ManageInventoryScreen(),
-                        ),
-                      );
-                    },
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ManageInventoryScreen(),
+                      ),
+                    ),
                   ),
 
-                  // View Orders
+                  // ── View Orders ─────────────────────────────────────────
                   _buildMenuItem(
                     context,
                     icon: Icons.receipt_long_outlined,
@@ -188,17 +184,15 @@ class OwnerHomeScreen extends StatelessWidget {
                     subtitle: 'View and manage all orders',
                     color: Colors.orange,
                     isActive: true,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const ViewOrdersScreen(),
-                        ),
-                      );
-                    },
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ViewOrdersScreen(),
+                      ),
+                    ),
                   ),
 
-                  // Manage Workers
+                  // ── Manage Workers ──────────────────────────────────────
                   _buildMenuItem(
                     context,
                     icon: Icons.people_alt_outlined,
@@ -206,47 +200,51 @@ class OwnerHomeScreen extends StatelessWidget {
                     subtitle: 'Add and manage store workers',
                     color: Colors.teal,
                     isActive: true,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              ManageWorkerScreen(storeId: store.storeId),
-                        ),
-                      );
-                    },
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            ManageWorkerScreen(storeId: store.storeId),
+                      ),
+                    ),
                   ),
 
-                  // Manage Payments
+                  // ── Manage Payments (NOW ACTIVE) ────────────────────────
                   _buildMenuItem(
                     context,
                     icon: Icons.payments_outlined,
                     title: 'Manage Payments',
-                    subtitle: 'Coming in Phase 6',
+                    subtitle: 'View transactions & confirm payments',
                     color: Colors.green,
-                    isActive: false,
-                    onTap: () {},
+                    isActive: true,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ManagePaymentsScreen(
+                          storeId: store.storeId,
+                          canConfirmPayments: true,
+                        ),
+                      ),
+                    ),
                   ),
 
-                  // Manage Pricing
+                  // ── Manage Pricing ──────────────────────────────────────
                   _buildMenuItem(
                     context,
                     icon: Icons.price_change_outlined,
                     title: 'Manage Pricing',
-                    subtitle: 'Edit prices for all products',
+                    subtitle: 'Edit prices + AI suggestions',
                     color: Colors.purple,
                     isActive: true,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const ManagePricingScreen(),
-                        ),
-                      );
-                    },
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ManagePricingScreen(),
+                      ),
+                    ),
                   ),
 
-                  // AI Analytics
+                  // ── AI Analytics (Phase 8 — coming) ────────────────────
                   _buildMenuItem(
                     context,
                     icon: Icons.analytics_outlined,

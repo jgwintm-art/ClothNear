@@ -4,6 +4,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
 import '../models/store_model.dart';
 import '../services/auth_service.dart';
+import 'worker/worker_orders_screen.dart';
+import 'worker/worker_inventory_screen.dart';
+import 'shared/manage_payments_screen.dart';
 
 class WorkerHomeScreen extends StatefulWidget {
   const WorkerHomeScreen({super.key});
@@ -32,13 +35,11 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) throw Exception('Not logged in.');
 
-      // Step 1: Load worker's user document — contains storeId
       final userDoc = await _firestore.collection('users').doc(uid).get();
       if (!userDoc.exists) throw Exception('Worker account not found.');
 
       final worker = UserModel.fromMap(userDoc.data()!);
 
-      // Step 2: Verify account is active
       if (!worker.isActive) {
         await _authService.logout();
         if (!mounted) return;
@@ -46,7 +47,6 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
         return;
       }
 
-      // Step 3: Load the store using storeId from the worker doc (NOT ownerUid)
       if (worker.storeId == null) {
         throw Exception('Worker is not assigned to any store.');
       }
@@ -57,8 +57,7 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
           .get();
       if (!storeDoc.exists) throw Exception('Assigned store not found.');
 
-      final storeData = storeDoc.data()!;
-      final store = StoreModel.fromMap(storeData, storeDoc.id);
+      final store = StoreModel.fromMap(storeDoc.data()!, storeDoc.id);
 
       setState(() {
         _worker = worker;
@@ -116,56 +115,62 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
     final store = _store!;
     final permissions = worker.permissions;
 
-    // Build only the menu items the worker has permission for
     final menuItems = <_WorkerMenuItem>[];
 
+    // View Orders — requires canUpdateOrderStatus
     if (permissions['canUpdateOrderStatus'] == true) {
       menuItems.add(
         _WorkerMenuItem(
           icon: Icons.receipt_long_outlined,
           label: 'View Orders',
           color: Colors.blue[700]!,
-          onTap: () {
-            // Navigate to your existing ViewOrdersScreen
-            // Navigator.push(context, MaterialPageRoute(
-            //   builder: (_) => ViewOrdersScreen(storeId: store.storeId),
-            // ));
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Navigate to View Orders')),
-            );
-          },
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => WorkerOrdersScreen(
+                storeId: store.storeId,
+                canUpdateStatus: true,
+                canConfirmPayments: permissions['canConfirmPayments'] == true,
+              ),
+            ),
+          ),
         ),
       );
     }
 
+    // Manage Payments — requires canConfirmPayments
     if (permissions['canConfirmPayments'] == true) {
       menuItems.add(
         _WorkerMenuItem(
           icon: Icons.payments_outlined,
           label: 'Manage Payments',
           color: Colors.green[700]!,
-          onTap: () {
-            // Navigate to your existing ManagePaymentsScreen
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Navigate to Manage Payments')),
-            );
-          },
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ManagePaymentsScreen(
+                storeId: store.storeId,
+                canConfirmPayments: true,
+              ),
+            ),
+          ),
         ),
       );
     }
 
+    // View Inventory — requires canViewInventory
     if (permissions['canViewInventory'] == true) {
       menuItems.add(
         _WorkerMenuItem(
           icon: Icons.inventory_2_outlined,
           label: 'View Inventory',
           color: Colors.orange[700]!,
-          onTap: () {
-            // Navigate to your existing inventory view screen
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Navigate to Inventory')),
-            );
-          },
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => WorkerInventoryScreen(storeId: store.storeId),
+            ),
+          ),
         ),
       );
     }
@@ -243,7 +248,7 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
             ),
           ),
 
-          // Menu items or no-access state
+          // Menu grid or no-access state
           Expanded(
             child: menuItems.isEmpty
                 ? Center(
@@ -297,7 +302,6 @@ class _WorkerMenuItem {
   final String label;
   final Color color;
   final VoidCallback onTap;
-
   const _WorkerMenuItem({
     required this.icon,
     required this.label,
@@ -308,7 +312,6 @@ class _WorkerMenuItem {
 
 class _WorkerMenuCard extends StatelessWidget {
   final _WorkerMenuItem item;
-
   const _WorkerMenuCard({required this.item});
 
   @override
@@ -322,7 +325,7 @@ class _WorkerMenuCard extends StatelessWidget {
           border: Border.all(color: Colors.grey[200]!),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 10),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -334,7 +337,7 @@ class _WorkerMenuCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: item.color.withValues(alpha: 25),
+                color: item.color.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(item.icon, color: item.color, size: 32),
