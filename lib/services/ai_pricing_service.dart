@@ -94,7 +94,10 @@ Respond in this EXACT JSON format and nothing else — no markdown, no explanati
 Use the exact variant keys from the list above. Give realistic Philippine peso ranges.
 ''';
 
-    final model = GenerativeModel(model: 'gemini-1.5-flash', apiKey: apiKey);
+    final model = GenerativeModel(
+      model: 'gemini-1.5-flash-latest',
+      apiKey: apiKey,
+    );
 
     final response = await model.generateContent([Content.text(prompt)]);
     final text = response.text ?? '';
@@ -107,8 +110,9 @@ Use the exact variant keys from the list above. Give realistic Philippine peso r
       // Simple JSON parse
       final jsonStart = clean.indexOf('{');
       final jsonEnd = clean.lastIndexOf('}');
-      if (jsonStart == -1 || jsonEnd == -1)
-        {throw Exception('No JSON in response');}
+      if (jsonStart == -1 || jsonEnd == -1) {
+        throw Exception('No JSON in response');
+      }
       final jsonStr = clean.substring(jsonStart, jsonEnd + 1);
 
       final result = <String, String>{};
