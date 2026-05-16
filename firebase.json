@@ -1,27 +1,4 @@
 {
-  "flutter": {
-    "platforms": {
-      "android": {
-        "default": {
-          "projectId": "clothnear",
-          "appId": "1:917969859882:android:c8c5fe0032151cfe621a53",
-          "fileOutput": "android/app/google-services.json"
-        }
-      },
-      "dart": {
-        "lib/firebase_options.dart": {
-          "projectId": "clothnear",
-          "configurations": {
-            "android": "1:917969859882:android:c8c5fe0032151cfe621a53",
-            "ios": "1:917969859882:ios:8b1c42c6148f5d80621a53",
-            "macos": "1:917969859882:ios:8b1c42c6148f5d80621a53",
-            "web": "1:917969859882:web:c0906b05e9c71aa0621a53",
-            "windows": "1:917969859882:web:6dced7bcbf7eae55621a53"
-          }
-        }
-      }
-    }
-  },
   "hosting": {
     "public": "build/web",
     "ignore": [
