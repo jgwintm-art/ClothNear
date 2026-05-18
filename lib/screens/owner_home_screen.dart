@@ -8,6 +8,7 @@ import 'owner/inventory/manage_inventory_screen.dart';
 import 'owner/orders/view_orders_screen.dart';
 import 'owner/workers/manage_worker_screen.dart';
 import 'owner/pricing/manage_pricing_screen.dart';
+import 'owner/analytics/ai_analytics_dashboard_screen.dart';
 import 'shared/manage_payments_screen.dart';
 
 class OwnerHomeScreen extends StatelessWidget {
@@ -100,7 +101,6 @@ class OwnerHomeScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Welcome header
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
@@ -149,7 +149,6 @@ class OwnerHomeScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 24),
-
                   Text(
                     'Manage Your Store',
                     style: TextStyle(
@@ -159,8 +158,6 @@ class OwnerHomeScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
-
-                  // ── Manage Inventory ────────────────────────────────────
                   _buildMenuItem(
                     context,
                     icon: Icons.inventory_2_outlined,
@@ -175,8 +172,6 @@ class OwnerHomeScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-
-                  // ── View Orders ─────────────────────────────────────────
                   _buildMenuItem(
                     context,
                     icon: Icons.receipt_long_outlined,
@@ -191,8 +186,6 @@ class OwnerHomeScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-
-                  // ── Manage Workers ──────────────────────────────────────
                   _buildMenuItem(
                     context,
                     icon: Icons.people_alt_outlined,
@@ -208,8 +201,6 @@ class OwnerHomeScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-
-                  // ── Manage Payments (NOW ACTIVE) ────────────────────────
                   _buildMenuItem(
                     context,
                     icon: Icons.payments_outlined,
@@ -227,8 +218,6 @@ class OwnerHomeScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-
-                  // ── Manage Pricing ──────────────────────────────────────
                   _buildMenuItem(
                     context,
                     icon: Icons.price_change_outlined,
@@ -243,16 +232,19 @@ class OwnerHomeScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-
-                  // ── AI Analytics (Phase 8 — coming) ────────────────────
                   _buildMenuItem(
                     context,
                     icon: Icons.analytics_outlined,
                     title: 'AI Analytics',
-                    subtitle: 'Coming in Phase 8',
+                    subtitle: 'Inventory, workforce, printers & forecasts',
                     color: Colors.teal,
-                    isActive: false,
-                    onTap: () {},
+                    isActive: true,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AiAnalyticsDashboardScreen(),
+                      ),
+                    ),
                   ),
                 ],
               ),
