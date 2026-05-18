@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../models/product_model.dart';
 import '../models/order_model.dart';
+import '../config/env_config.dart';
 
 class AiPricingService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -27,7 +28,7 @@ class AiPricingService {
     required ProductModel product,
     required String storeId,
   }) async {
-    final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
+    final apiKey = EnvConfig.geminiApiKey;
     if (apiKey.isEmpty) {
       throw Exception(
         'GEMINI_API_KEY not found in .env. Please add it to enable AI suggestions.',

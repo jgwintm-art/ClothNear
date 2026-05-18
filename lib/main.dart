@@ -8,10 +8,15 @@ import 'screens/owner_home_screen.dart';
 import 'screens/worker_home_screen.dart';
 import 'models/user_model.dart';
 import 'screens/force_password_change_screen.dart';
+import 'config/env_config.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: '.env');
+  try {
+    await dotenv.load(fileName: '.env');
+  } catch (_) {
+    // Local .env missing is OK if --dart-define is used (CI/production).
+  }
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const MyApp());
 }

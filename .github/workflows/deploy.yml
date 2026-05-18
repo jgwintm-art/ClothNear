@@ -3,7 +3,7 @@ name: Build and Deploy ClothNear to Firebase
 on:
   push:
     branches:
-      - main # triggers every time you push to main branch
+      - main
 
 jobs:
   build_and_deploy:
@@ -21,13 +21,30 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Create .env file
+      # Optional: still create .env for local-style asset builds
+      - name: Create .env file (local-style asset fallback)
         run: |
           echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
           echo "GEMINI_MODEL=gemini-2.5-flash" >> .env
 
-      - name: Build web
-        run: flutter build web
+      - name: Verify GitHub secret is set
+        run: |
+          if [ -z "${{ secrets.GEMINI_API_KEY }}" ]; then
+            echo "::error::GEMINI_API_KEY secret is empty or not configured in repo Settings → Secrets."
+            exit 1
+          fi
+
+      - name: Build web with dart-define
+        run: |
+          flutter build web --release \
+            --dart-define=GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }} \
+            --dart-define=GEMINI_MODEL=gemini-2.5-flash
+
+      - name: Verify build output (optional sanity check)
+        run: |
+          ls -la build/web/assets/
+          # Key is compiled into main.dart.js when using dart-define:
+          grep -q "flutter" build/web/main.dart.js
 
       - name: Deploy to Firebase
         run: npx firebase-tools deploy --only hosting --project clothnear --token "${{ secrets.FIREBASE_TOKEN }}"
