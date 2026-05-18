@@ -51,6 +51,7 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           flutter build web --release \
+            --pwa-strategy=none \
             --dart-define=GEMINI_API_KEY="$GEMINI_API_KEY" \
             --dart-define=GEMINI_MODEL=gemini-2.5-flash \
             --dart-define=GEMINI_KEY_COMPILED=true \
@@ -63,3 +64,11 @@ jobs:
 
       - name: Deploy to Firebase
         run: npx firebase-tools deploy --only hosting --project clothnear --token "${{ secrets.FIREBASE_TOKEN }}"
+
+      - name: Deployment info
+        run: |
+          echo "Deployed build ${GITHUB_SHA:0:12}"
+          echo "Open: https://clothnear.web.app"
+          echo "If AI still fails, clear site data (service worker cache from older builds)."
+        env:
+          GITHUB_SHA: ${{ github.sha }}
