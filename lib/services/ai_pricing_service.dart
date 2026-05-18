@@ -30,7 +30,7 @@ class AiPricingService {
     final apiKey = EnvConfig.geminiApiKey;
     if (apiKey.isEmpty) {
       throw Exception(
-        'GEMINI_API_KEY not found in .env. Please add it to enable AI suggestions.',
+        'GEMINI_API_KEY is not configured. ${EnvConfig.geminiConfigurationHint}',
       );
     }
 
@@ -94,7 +94,10 @@ Respond in this EXACT JSON format and nothing else — no markdown, no explanati
 Use the exact variant keys from the list above. Give realistic Philippine peso ranges.
 ''';
 
-    final model = GenerativeModel(model: 'gemini-2.5-flash', apiKey: apiKey);
+    final model = GenerativeModel(
+      model: EnvConfig.geminiModel,
+      apiKey: apiKey,
+    );
 
     final response = await model.generateContent([Content.text(prompt)]);
     final text = response.text ?? '';

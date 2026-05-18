@@ -1,9 +1,9 @@
 import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 
+import '../config/env_config.dart';
 import '../models/analytics_models.dart';
 import 'analytics_data_service.dart';
 import 'analytics_engine_service.dart';
@@ -67,12 +67,14 @@ class AiAnalyticsService {
     ShopAnalyticsReport report,
     String storeId,
   ) async {
-    final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
+    final apiKey = EnvConfig.geminiApiKey;
     if (apiKey.isEmpty) {
       return report.copyWithAi(
         narrative: report.insightsSummary,
         suggestions: const [],
-        error: 'GEMINI_API_KEY not configured — rule-based analytics only.',
+        error:
+            'GEMINI_API_KEY not configured — rule-based analytics only. '
+            '${EnvConfig.geminiConfigurationHint}',
       );
     }
 
@@ -94,7 +96,7 @@ $payload
 ''';
 
       final model = GenerativeModel(
-        model: 'gemini-2.5-flash',
+        model: EnvConfig.geminiModel,
         apiKey: apiKey,
       );
       final response = await model.generateContent([Content.text(prompt)]);
