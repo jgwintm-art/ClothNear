@@ -44,6 +44,8 @@ class EnvConfig {
   static bool get isGeminiConfigured => geminiApiKey.isNotEmpty;
 
   /// Shown in UI/errors to confirm which build is running (no secret exposed).
+  static String get buildId => ApiSecrets.ciBuildId;
+
   static String get deploymentDiagnostics {
     final keySource = ApiSecrets.geminiApiKey.isNotEmpty
         ? 'api_secrets'
@@ -52,8 +54,8 @@ class EnvConfig {
             : (dotenv.env['GEMINI_API_KEY'] ?? '').isNotEmpty
                 ? 'dotenv'
                 : 'none';
-    return 'keySource=$keySource, compiledFlag=$geminiKeyCompiledAtBuild, '
-        'configured=$isGeminiConfigured';
+    return 'build=$buildId, keySource=$keySource, '
+        'compiledFlag=$geminiKeyCompiledAtBuild, configured=$isGeminiConfigured';
   }
 
   static String get geminiConfigurationHint {

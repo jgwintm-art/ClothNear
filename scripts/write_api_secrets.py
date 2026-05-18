@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Writes lib/config/api_secrets.dart from GEMINI_API_KEY env (CI)."""
-import os
 import json
+import os
 from pathlib import Path
 
 key = os.environ.get("GEMINI_API_KEY", "").strip()
 if not key:
     raise SystemExit("GEMINI_API_KEY environment variable is empty")
+
+build_id = os.environ.get("GITHUB_SHA", "local")[:12]
 
 out = Path(__file__).resolve().parents[1] / "lib" / "config" / "api_secrets.dart"
 out.write_text(
@@ -14,8 +16,9 @@ out.write_text(
 abstract class ApiSecrets {{
   static const String geminiApiKey = {json.dumps(key)};
   static const String geminiModel = 'gemini-2.5-flash';
+  static const String ciBuildId = {json.dumps(build_id)};
 }}
 """,
     encoding="utf-8",
 )
-print(f"Wrote {out} ({len(key)} char key)")
+print(f"Wrote {out} (key length {len(key)}, build {build_id})")
