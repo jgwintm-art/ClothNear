@@ -72,9 +72,7 @@ class AiAnalyticsService {
       return report.copyWithAi(
         narrative: report.insightsSummary,
         suggestions: const [],
-        error:
-            'GEMINI_API_KEY not configured — rule-based analytics only. '
-            '${EnvConfig.geminiConfigurationHint}',
+        error: 'GEMINI_API_KEY not configured — rule-based analytics only.',
       );
     }
 

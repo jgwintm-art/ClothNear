@@ -5,7 +5,6 @@ import '../../../services/product_service.dart';
 import '../../../services/store_service.dart';
 import '../../../services/pricing_service.dart';
 import '../../../services/ai_pricing_service.dart';
-import '../../../config/env_config.dart';
 
 class ManagePricingScreen extends StatefulWidget {
   const ManagePricingScreen({super.key});
@@ -690,27 +689,14 @@ class _ProductPricingCardState extends State<_ProductPricingCard> {
     );
   }
 
-  Widget _buildDeployBadge() {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(
-        'Build ${EnvConfig.buildId} · Gemini '
-        '${EnvConfig.isGeminiConfigured ? "configured" : "NOT configured"}',
-        style: TextStyle(fontSize: 9, color: Colors.grey[600]),
-        textAlign: TextAlign.center,
-      ),
-    );
-  }
-
   Widget _buildAiPanel() {
     if (_isLoadingAi) {
-      return Center(
+      return const Center(
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.all(12),
           child: Column(
             children: [
-              _buildDeployBadge(),
-              const CircularProgressIndicator(),
+              CircularProgressIndicator(),
               SizedBox(height: 8),
               Text(
                 'Analyzing sales data and market trends...',
@@ -725,7 +711,6 @@ class _ProductPricingCardState extends State<_ProductPricingCard> {
     if (_aiError != null) {
       return Column(
         children: [
-          _buildDeployBadge(),
           Icon(Icons.error_outline, color: Colors.red[400], size: 36),
           const SizedBox(height: 8),
           Text(
@@ -749,11 +734,7 @@ class _ProductPricingCardState extends State<_ProductPricingCard> {
 
     if (_aiSuggestions.isEmpty) {
       return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildDeployBadge(),
-            OutlinedButton.icon(
+        child: OutlinedButton.icon(
           onPressed: _loadAiSuggestions,
           icon: const Icon(Icons.auto_awesome, size: 14),
           label: const Text(
@@ -764,8 +745,6 @@ class _ProductPricingCardState extends State<_ProductPricingCard> {
             foregroundColor: Colors.teal[700],
             side: BorderSide(color: Colors.teal[300]!),
           ),
-            ),
-          ],
         ),
       );
     }
@@ -773,7 +752,6 @@ class _ProductPricingCardState extends State<_ProductPricingCard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildDeployBadge(),
         // Reasoning
         if (_aiReasoning.isNotEmpty) ...[
           Container(

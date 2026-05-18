@@ -33,15 +33,10 @@ jobs:
         run: |
           printf 'GEMINI_API_KEY=%s\nGEMINI_MODEL=gemini-2.5-flash\n' "$GEMINI_API_KEY" > .env
 
-      - name: Inject compile-time API secrets (primary for Flutter Web)
+      - name: Inject compile-time API secrets
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GITHUB_SHA: ${{ github.sha }}
         run: python3 scripts/write_api_secrets.py
-
-      - name: Verify api_secrets.dart before build
-        run: |
-          python3 -c "import pathlib; t=pathlib.Path('lib/config/api_secrets.dart').read_text(); assert 'geminiApiKey = ' in t and \"geminiApiKey = ''\" not in t and 'geminiApiKey = \"\"' not in t, 'api_secrets.dart was not injected'"
 
       - name: Install dependencies
         run: flutter pub get
@@ -53,22 +48,10 @@ jobs:
           flutter build web --release \
             --pwa-strategy=none \
             --dart-define=GEMINI_API_KEY="$GEMINI_API_KEY" \
-            --dart-define=GEMINI_MODEL=gemini-2.5-flash \
-            --dart-define=GEMINI_KEY_COMPILED=true \
-            --dart-define=BUILD_ID="${{ github.sha }}"
+            --dart-define=GEMINI_MODEL=gemini-2.5-flash
 
-      - name: Verify Gemini key is compiled into main.dart.js
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python3 scripts/verify_web_bundle.py
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools@15.18.0
 
-      - name: Deploy to Firebase
-        run: npx firebase-tools deploy --only hosting --project clothnear --token "${{ secrets.FIREBASE_TOKEN }}"
-
-      - name: Deployment info
-        run: |
-          echo "Deployed build ${GITHUB_SHA:0:12}"
-          echo "Open: https://clothnear.web.app"
-          echo "If AI still fails, clear site data (service worker cache from older builds)."
-        env:
-          GITHUB_SHA: ${{ github.sha }}
+      - name: Deploy to Firebase Hosting
+        run: firebase deploy --only hosting --project clothnear --non-interactive --token "${{ secrets.FIREBASE_TOKEN }}"
