@@ -18,9 +18,6 @@ jobs:
         with:
           channel: stable
 
-      - name: Install dependencies
-        run: flutter pub get
-
       - name: Verify GitHub secret is set
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -30,14 +27,21 @@ jobs:
             exit 1
           fi
 
-      # Bundled .env fallback for flutter_dotenv; primary path is --dart-define.
-      - name: Create .env for Flutter asset bundle
+      - name: Create .env for local-style asset bundle
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           printf 'GEMINI_API_KEY=%s\nGEMINI_MODEL=gemini-2.5-flash\n' "$GEMINI_API_KEY" > .env
 
-      - name: Build web (compile API key into bundle)
+      - name: Inject compile-time API secrets (primary for Flutter Web)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python3 scripts/write_api_secrets.py
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build web release
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
@@ -46,17 +50,13 @@ jobs:
             --dart-define=GEMINI_MODEL=gemini-2.5-flash \
             --dart-define=GEMINI_KEY_COMPILED=true
 
-      - name: Verify compile-time define marker
+      - name: Verify API key was injected before build
         run: |
-          if ! grep -q "GEMINI_KEY_COMPILED" build/web/main.dart.js; then
-            echo "::error::Build missing GEMINI_KEY_COMPILED — dart-define was not applied."
-            exit 1
-          fi
+          python3 -c "import pathlib; t=pathlib.Path('lib/config/api_secrets.dart').read_text(); assert 'geminiApiKey = ' in t and \"geminiApiKey = ''\" not in t and 'geminiApiKey = \"\"' not in t, 'api_secrets.dart was not injected'"
 
-      - name: Verify env asset exists in build output
+      - name: Verify compile marker in bundle
         run: |
-          ls -la build/web/assets/
-          find build/web/assets -name '*env*' -o -name 'AssetManifest*' | head -20
+          grep -q "GEMINI_KEY_COMPILED" build/web/main.dart.js
 
       - name: Deploy to Firebase
         run: npx firebase-tools deploy --only hosting --project clothnear --token "${{ secrets.FIREBASE_TOKEN }}"

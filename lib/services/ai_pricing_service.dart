@@ -30,7 +30,8 @@ class AiPricingService {
     final apiKey = EnvConfig.geminiApiKey;
     if (apiKey.isEmpty) {
       throw Exception(
-        'GEMINI_API_KEY is not configured. ${EnvConfig.geminiConfigurationHint}',
+        'GEMINI_API_KEY is not configured. ${EnvConfig.geminiConfigurationHint} '
+        '[${EnvConfig.deploymentDiagnostics}]',
       );
     }
 
