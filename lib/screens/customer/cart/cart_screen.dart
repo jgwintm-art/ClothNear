@@ -13,23 +13,25 @@ class CartScreen extends StatefulWidget {
 
 class _CartScreenState extends State<CartScreen> {
   // Tracks which cart item IDs are selected for checkout.
-  // Starts empty; populated when the first stream snapshot arrives.
   final Set<String> _selectedIds = {};
-
-  // Whether we have initialised the selection set from the first snapshot.
   bool _selectionInitialised = false;
 
-  /// Initialise all items as selected on first load, then leave user choices
-  /// alone on subsequent stream updates (e.g. quantity changes).
-  void _initialiseSelection(List<CartItemModel> items) {
+  /// Called OUTSIDE build() via addPostFrameCallback to avoid
+  /// mutating state during a build pass (which causes silent crashes).
+  void _syncSelection(List<CartItemModel> items) {
     if (!_selectionInitialised) {
-      _selectedIds.addAll(items.map((i) => i.cartItemId));
-      _selectionInitialised = true;
+      // First load — select everything by default.
+      setState(() {
+        _selectedIds.addAll(items.map((i) => i.cartItemId));
+        _selectionInitialised = true;
+      });
     } else {
-      // Remove IDs that no longer exist in the cart (item was deleted).
-      _selectedIds.retainWhere(
-        (id) => items.any((i) => i.cartItemId == id),
-      );
+      // Subsequent updates — prune IDs for items that no longer exist.
+      final currentIds = items.map((i) => i.cartItemId).toSet();
+      final stale = _selectedIds.difference(currentIds);
+      if (stale.isNotEmpty) {
+        setState(() => _selectedIds.removeAll(stale));
+      }
     }
   }
 
@@ -89,11 +91,17 @@ class _CartScreenState extends State<CartScreen> {
 
           final items = snapshot.data!;
 
-          // Keep selection set in sync with current cart items.
-          _initialiseSelection(items);
+          // Sync selection AFTER the current build frame completes —
+          // never mutate state during build.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _syncSelection(items);
+          });
 
-          final selectedItems =
-              items.where((i) => _selectedIds.contains(i.cartItemId)).toList();
+          // Derive selected items from the current _selectedIds set.
+          // Use a safe intersection so stale IDs never cause issues.
+          final selectedItems = items
+              .where((i) => _selectedIds.contains(i.cartItemId))
+              .toList();
 
           final subtotal = items.fold<double>(
             0,
@@ -105,7 +113,8 @@ class _CartScreenState extends State<CartScreen> {
             (sum, item) => sum + item.totalPrice,
           );
 
-          final allSelected = _selectedIds.length == items.length;
+          final allSelected =
+              items.isNotEmpty && _selectedIds.length == items.length;
 
           return Column(
             children: [
@@ -259,12 +268,12 @@ class _CartScreenState extends State<CartScreen> {
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton(
-                    onPressed: _selectedIds.isEmpty
-                        ? null // disabled — nothing selected
+                    onPressed: selectedItems.isEmpty
+                        ? null
                         : () => Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => CheckoutScreen(
+                              builder: (_) => CheckoutScreen(
                                 items: selectedItems,
                                 totalAmount: selectedSubtotal,
                               ),
@@ -278,13 +287,13 @@ class _CartScreenState extends State<CartScreen> {
                       ),
                     ),
                     child: Text(
-                      _selectedIds.isEmpty
+                      selectedItems.isEmpty
                           ? 'Select items to checkout'
-                          : 'Proceed to Checkout (${_selectedIds.length})',
+                          : 'Proceed to Checkout (${selectedItems.length})',
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
-                        color: _selectedIds.isEmpty
+                        color: selectedItems.isEmpty
                             ? Colors.grey[500]
                             : Colors.white,
                       ),
@@ -377,7 +386,6 @@ class _CartScreenState extends State<CartScreen> {
                     style: TextStyle(fontSize: 12, color: Colors.blue[700]),
                   ),
                   const SizedBox(height: 4),
-                  // Design badge
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 6,

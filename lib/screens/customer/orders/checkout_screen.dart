@@ -66,6 +66,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   // ── In-person order placement (unchanged from existing flow) ─────────────
 
   Future<void> _placeInPersonOrder() async {
+    if (widget.items.isEmpty) return;
     setState(() => _isLoading = true);
     try {
       final uid = FirebaseAuth.instance.currentUser!.uid;
@@ -122,6 +123,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   // ── Online (PayMongo) order placement ─────────────────────────────────────
 
   Future<void> _placeOnlineOrder() async {
+    if (widget.items.isEmpty) return;
     setState(() => _isLoading = true);
     try {
       final uid = FirebaseAuth.instance.currentUser!.uid;
