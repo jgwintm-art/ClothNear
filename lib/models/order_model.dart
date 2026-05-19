@@ -7,15 +7,30 @@ class OrderModel {
   final double totalPrice;
   final double amountPaid;
   final double remainingBalance;
-  final String paymentType; // 'full' or 'half'
-  final String orderType; // 'normal', 'rush', 'bulk'
-  final String
-  status; // 'pending_approval', 'processing', 'ready', 'completed', 'rejected', 'cancelled'
-  final String designType; // 'preset' or 'custom'
+  final String paymentType; // 'full' | 'half'
+  final String orderType; // 'normal' | 'rush' | 'bulk'
+  final String status;
+  // 'pending_approval' | 'payment_pending' | 'processing' |
+  // 'ready' | 'completed' | 'rejected' | 'cancelled'
+  final String designType;
   final String designUrl;
   final String designName;
   final String specialInstructions;
   final DateTime createdAt;
+
+  // ── PayMongo fields (nullable — absent on in-person/legacy orders) ──────────
+  /// The PayMongo Link ID (e.g. "link_xxxx"). Used to poll payment status.
+  final String? paymongoLinkId;
+
+  /// The hosted checkout URL the customer opens to pay.
+  final String? paymongoCheckoutUrl;
+
+  /// Payment channel chosen by customer: 'gcash' | 'paymaya' | 'card' | null
+  final String? paymentChannel;
+
+  /// PayMongo payment status: 'unpaid' | 'paid' | 'failed' | null
+  /// null = not an online payment (in-person order)
+  final String? paymongoPaymentStatus;
 
   OrderModel({
     required this.orderId,
@@ -34,6 +49,11 @@ class OrderModel {
     this.designName = '',
     this.specialInstructions = '',
     required this.createdAt,
+    // PayMongo — all optional, null-safe
+    this.paymongoLinkId,
+    this.paymongoCheckoutUrl,
+    this.paymentChannel,
+    this.paymongoPaymentStatus,
   });
 
   factory OrderModel.fromMap(Map<String, dynamic> map, String id) {
@@ -60,11 +80,16 @@ class OrderModel {
                 ? map['createdAt'] as DateTime
                 : (map['createdAt'] as dynamic).toDate()
           : DateTime.now(),
+      // PayMongo — gracefully null on existing documents
+      paymongoLinkId: map['paymongoLinkId'] as String?,
+      paymongoCheckoutUrl: map['paymongoCheckoutUrl'] as String?,
+      paymentChannel: map['paymentChannel'] as String?,
+      paymongoPaymentStatus: map['paymongoPaymentStatus'] as String?,
     );
   }
 
   Map<String, dynamic> toMap() {
-    return {
+    final m = <String, dynamic>{
       'customerUid': customerUid,
       'storeId': storeId,
       'storeName': storeName,
@@ -81,13 +106,62 @@ class OrderModel {
       'specialInstructions': specialInstructions,
       'createdAt': createdAt.millisecondsSinceEpoch,
     };
+    // Only write PayMongo fields when they have values — keeps existing
+    // in-person order documents clean.
+    if (paymongoLinkId != null) m['paymongoLinkId'] = paymongoLinkId;
+    if (paymongoCheckoutUrl != null) {
+      m['paymongoCheckoutUrl'] = paymongoCheckoutUrl;
+    }
+    if (paymentChannel != null) m['paymentChannel'] = paymentChannel;
+    if (paymongoPaymentStatus != null) {
+      m['paymongoPaymentStatus'] = paymongoPaymentStatus;
+    }
+    return m;
   }
 
-  // Helper getters
+  /// Creates a copy of this order with selected fields replaced.
+  OrderModel copyWith({
+    String? status,
+    double? amountPaid,
+    double? remainingBalance,
+    String? paymongoLinkId,
+    String? paymongoCheckoutUrl,
+    String? paymentChannel,
+    String? paymongoPaymentStatus,
+  }) {
+    return OrderModel(
+      orderId: orderId,
+      customerUid: customerUid,
+      storeId: storeId,
+      storeName: storeName,
+      items: items,
+      totalPrice: totalPrice,
+      amountPaid: amountPaid ?? this.amountPaid,
+      remainingBalance: remainingBalance ?? this.remainingBalance,
+      paymentType: paymentType,
+      orderType: orderType,
+      status: status ?? this.status,
+      designType: designType,
+      designUrl: designUrl,
+      designName: designName,
+      specialInstructions: specialInstructions,
+      createdAt: createdAt,
+      paymongoLinkId: paymongoLinkId ?? this.paymongoLinkId,
+      paymongoCheckoutUrl: paymongoCheckoutUrl ?? this.paymongoCheckoutUrl,
+      paymentChannel: paymentChannel ?? this.paymentChannel,
+      paymongoPaymentStatus:
+          paymongoPaymentStatus ?? this.paymongoPaymentStatus,
+    );
+  }
+
+  // ── Display helpers ──────────────────────────────────────────────────────────
+
   String get statusDisplay {
     switch (status) {
       case 'pending_approval':
         return 'Pending Approval';
+      case 'payment_pending':
+        return 'Awaiting Payment';
       case 'processing':
         return 'Processing';
       case 'ready':
@@ -107,14 +181,35 @@ class OrderModel {
     switch (status) {
       case 'pending_approval':
         return 0.1;
+      case 'payment_pending':
+        return 0.2;
       case 'processing':
-        return 0.35;
+        return 0.45;
       case 'ready':
         return 0.75;
       case 'completed':
         return 1.0;
       default:
         return 0.0;
+    }
+  }
+
+  bool get isOnlinePayment =>
+      paymongoLinkId != null && paymongoLinkId!.isNotEmpty;
+
+  bool get isPaymentConfirmed =>
+      isOnlinePayment ? paymongoPaymentStatus == 'paid' : remainingBalance <= 0;
+
+  String get paymentChannelDisplay {
+    switch (paymentChannel) {
+      case 'gcash':
+        return 'GCash';
+      case 'paymaya':
+        return 'Maya';
+      case 'card':
+        return 'Card';
+      default:
+        return 'In-Person';
     }
   }
 }

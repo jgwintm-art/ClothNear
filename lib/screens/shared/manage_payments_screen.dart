@@ -3,12 +3,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/order_model.dart';
 import '../../services/order_service.dart';
 
-/// Manage Payments screen — used by both Owner and Worker/Cashier.
+/// Manage Payments — used by Owner and Worker/Cashier.
 /// Shows all orders grouped by payment status.
-/// Workers with canConfirmPayments can mark in-person payments as received.
+/// Distinguishes online (PayMongo) from in-person payments.
+/// Workers with canConfirmPayments can mark in-person balances as received.
 class ManagePaymentsScreen extends StatefulWidget {
   final String storeId;
-  final bool canConfirmPayments; // true for owners and permitted workers
+  final bool canConfirmPayments;
 
   const ManagePaymentsScreen({
     super.key,
@@ -37,12 +38,11 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
     super.dispose();
   }
 
-  // Mark balance as received for in-person orders
-  Future<void> _confirmPayment(OrderModel order) async {
+  Future<void> _confirmInPersonPayment(OrderModel order) async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirm Payment'),
+      builder: (_) => AlertDialog(
+        title: const Text('Confirm Cash Payment'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -50,12 +50,12 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
             Text('Order #${order.orderId.substring(0, 6).toUpperCase()}'),
             const SizedBox(height: 8),
             Text(
-              'Remaining balance: ₱${order.remainingBalance.toStringAsFixed(0)}',
+              'Amount: ₱${order.remainingBalance.toStringAsFixed(2)}',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             const Text(
-              'Confirm that you have received the remaining balance from the customer?',
+              'Confirm you have received this cash payment from the customer?',
             ),
           ],
         ),
@@ -75,10 +75,8 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
         ],
       ),
     );
-
     if (confirm != true || !mounted) return;
 
-    // Update the order: mark remaining balance as 0 and amountPaid = total
     await FirebaseFirestore.instance
         .collection('orders')
         .doc(order.orderId)
@@ -93,10 +91,9 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Payment confirmed for Order #${order.orderId.substring(0, 6).toUpperCase()}',
+          'Cash payment confirmed for #${order.orderId.substring(0, 6).toUpperCase()}',
         ),
         backgroundColor: Colors.green[700],
-        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -141,32 +138,38 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
           }
 
           final all = snapshot.data ?? [];
-          // Only show orders that are not rejected/cancelled
           final active = all
               .where((o) => o.status != 'rejected' && o.status != 'cancelled')
               .toList();
 
           final balanceDue = active
-              .where((o) => o.remainingBalance > 0)
+              .where(
+                (o) => o.remainingBalance > 0 && o.status != 'payment_pending',
+              )
               .toList();
           final fullyPaid = active
-              .where((o) => o.remainingBalance <= 0)
+              .where(
+                (o) =>
+                    o.remainingBalance <= 0 ||
+                    (o.isOnlinePayment && o.paymongoPaymentStatus == 'paid'),
+              )
+              .toList();
+          final awaitingOnline = active
+              .where((o) => o.status == 'payment_pending')
               .toList();
 
-          // Summary totals
-          final totalRevenue = active.fold<double>(
+          final totalReceived = active.fold<double>(
             0,
-            (runningTotal, order) => runningTotal + order.amountPaid,
+            (s, o) => s + o.amountPaid,
           );
-
           final totalBalance = balanceDue.fold<double>(
             0,
-            (runningTotal, order) => runningTotal + order.remainingBalance,
+            (s, o) => s + o.remainingBalance,
           );
 
           return Column(
             children: [
-              // Revenue summary
+              // Summary bar
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(
@@ -177,34 +180,33 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _buildSummaryItem(
-                      'Total Received',
-                      '₱${totalRevenue.toStringAsFixed(0)}',
+                    _summaryItem(
+                      'Received',
+                      '₱${totalReceived.toStringAsFixed(0)}',
                       Colors.white,
                     ),
                     Container(width: 1, height: 36, color: Colors.white30),
-                    _buildSummaryItem(
+                    _summaryItem(
                       'Balance Due',
                       '₱${totalBalance.toStringAsFixed(0)}',
                       totalBalance > 0 ? Colors.yellow[200]! : Colors.white,
                     ),
                     Container(width: 1, height: 36, color: Colors.white30),
-                    _buildSummaryItem(
-                      'Orders',
-                      '${active.length}',
+                    _summaryItem(
+                      'Pending Online',
+                      '${awaitingOnline.length}',
                       Colors.white,
                     ),
                   ],
                 ),
               ),
-
               Expanded(
                 child: TabBarView(
                   controller: _tabController,
                   children: [
-                    _buildPaymentList(active),
-                    _buildPaymentList(balanceDue),
-                    _buildPaymentList(fullyPaid),
+                    _buildList(active),
+                    _buildList(balanceDue),
+                    _buildList(fullyPaid),
                   ],
                 ),
               ),
@@ -215,7 +217,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
     );
   }
 
-  Widget _buildSummaryItem(String label, String value, Color valueColor) {
+  Widget _summaryItem(String label, String value, Color valueColor) {
     return Column(
       children: [
         Text(
@@ -234,7 +236,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
     );
   }
 
-  Widget _buildPaymentList(List<OrderModel> orders) {
+  Widget _buildList(List<OrderModel> orders) {
     if (orders.isEmpty) {
       return Center(
         child: Column(
@@ -250,134 +252,166 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
         ),
       );
     }
-
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: orders.length,
       separatorBuilder: (_, _) => const SizedBox(height: 10),
-      itemBuilder: (context, index) => _buildPaymentCard(orders[index]),
+      itemBuilder: (_, i) => _buildCard(orders[i]),
     );
   }
 
-  Widget _buildPaymentCard(OrderModel order) {
+  Widget _buildCard(OrderModel order) {
     final hasBalance = order.remainingBalance > 0;
-    final isFullyPaid = !hasBalance;
+    final isPending = order.status == 'payment_pending';
+    final isOnline = order.isOnlinePayment;
+    final isPaid = order.isPaymentConfirmed;
+
+    Color borderColor;
+    if (isPending) {
+      borderColor = Colors.blue[200]!;
+    } else if (hasBalance) {
+      borderColor = Colors.orange[200]!;
+    } else {
+      borderColor = Colors.green[200]!;
+    }
 
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: hasBalance ? Colors.orange[200]! : Colors.green[200]!,
-        ),
+        border: Border.all(color: borderColor),
       ),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header row
+            // Header
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Order #${order.orderId.substring(0, 6).toUpperCase()}',
+                  '#${order.orderId.substring(0, 6).toUpperCase()}',
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isFullyPaid ? Colors.green[50] : Colors.orange[50],
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: isFullyPaid
-                          ? Colors.green[300]!
-                          : Colors.orange[300]!,
+                Row(
+                  children: [
+                    // Online vs in-person badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isOnline ? Colors.blue[50] : Colors.grey[100],
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        isOnline
+                            ? '${order.paymentChannelDisplay} Online'
+                            : 'In-Person',
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: isOnline ? Colors.blue[700] : Colors.grey[700],
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
-                  ),
-                  child: Text(
-                    isFullyPaid ? 'Fully Paid' : 'Balance Due',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: isFullyPaid
-                          ? Colors.green[700]
-                          : Colors.orange[700],
+                    const SizedBox(width: 6),
+                    // Payment status badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isPending
+                            ? Colors.blue[50]
+                            : isPaid
+                            ? Colors.green[50]
+                            : Colors.orange[50],
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: isPending
+                              ? Colors.blue[200]!
+                              : isPaid
+                              ? Colors.green[200]!
+                              : Colors.orange[200]!,
+                        ),
+                      ),
+                      child: Text(
+                        isPending
+                            ? 'Awaiting Payment'
+                            : isPaid
+                            ? 'Paid'
+                            : 'Balance Due',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                          color: isPending
+                              ? Colors.blue[700]
+                              : isPaid
+                              ? Colors.green[700]
+                              : Colors.orange[700],
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
 
-            // Items summary
+            // Items
             Text(
               order.items
                   .map((i) => '${i['productName']} ×${i['quantity']}')
                   .join(', '),
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 10),
 
-            // Payment breakdown
+            // Amount breakdown
             Row(
               children: [
                 Expanded(
-                  child: _buildPaymentRow(
+                  child: _amountItem(
                     'Total',
                     '₱${order.totalPrice.toStringAsFixed(0)}',
                     Colors.grey[700]!,
                   ),
                 ),
                 Expanded(
-                  child: _buildPaymentRow(
+                  child: _amountItem(
                     'Paid',
                     '₱${order.amountPaid.toStringAsFixed(0)}',
                     Colors.green[700]!,
                   ),
                 ),
                 Expanded(
-                  child: _buildPaymentRow(
+                  child: _amountItem(
                     'Balance',
                     '₱${order.remainingBalance.toStringAsFixed(0)}',
-                    hasBalance ? Colors.orange[700]! : Colors.grey[400]!,
+                    hasBalance && !isPending
+                        ? Colors.orange[700]!
+                        : Colors.grey[400]!,
                   ),
                 ),
               ],
             ),
-
-            // Payment type badge
             const SizedBox(height: 8),
+
+            // Order status
             Row(
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[50],
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    order.paymentType == 'full'
-                        ? 'Full Payment'
-                        : 'Half & Half',
-                    style: TextStyle(fontSize: 10, color: Colors.blue[700]),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
+                    horizontal: 7,
                     vertical: 3,
                   ),
                   decoration: BoxDecoration(
@@ -386,17 +420,37 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
                   ),
                   child: Text(
                     order.statusDisplay,
-                    style: TextStyle(fontSize: 10, color: Colors.grey[700]),
+                    style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+                  ),
+                ),
+                Container(
+                  margin: const EdgeInsets.only(left: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    order.paymentType == 'full'
+                        ? 'Full Payment'
+                        : 'Half & Half',
+                    style: TextStyle(fontSize: 10, color: Colors.grey[600]),
                   ),
                 ),
                 const Spacer(),
-                // Confirm payment button — only if balance due and has permission
-                if (hasBalance && widget.canConfirmPayments)
+                // Confirm button — only for in-person orders with balance
+                if (hasBalance &&
+                    !isOnline &&
+                    !isPending &&
+                    widget.canConfirmPayments)
                   ElevatedButton.icon(
-                    onPressed: () => _confirmPayment(order),
+                    onPressed: () => _confirmInPersonPayment(order),
                     icon: const Icon(Icons.check_circle_outline, size: 14),
                     label: const Text(
-                      'Confirm Received',
+                      'Confirm Cash',
                       style: TextStyle(fontSize: 11),
                     ),
                     style: ElevatedButton.styleFrom(
@@ -413,6 +467,23 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                   ),
+                // Online payment awaiting — read-only note
+                if (isPending && isOnline)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.blue[200]!),
+                    ),
+                    child: Text(
+                      'Auto-confirmed on pay',
+                      style: TextStyle(fontSize: 10, color: Colors.blue[700]),
+                    ),
+                  ),
               ],
             ),
           ],
@@ -421,7 +492,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
     );
   }
 
-  Widget _buildPaymentRow(String label, String value, Color valueColor) {
+  Widget _amountItem(String label, String value, Color valueColor) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../models/cart_model.dart';
 import '../../../models/order_model.dart';
 import '../../../services/order_service.dart';
 import '../../../services/cart_service.dart';
 import '../../../services/store_service.dart';
+import '../../../services/paymongo_service.dart';
+import '../../../config/env_config.dart';
 import 'order_status_screen.dart';
+import 'payment_pending_screen.dart';
 
 class CheckoutScreen extends StatefulWidget {
   final List<CartItemModel> items;
@@ -28,8 +32,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final _instructionsController = TextEditingController();
 
   String _orderType = 'normal';
-  String _paymentType = 'full';
-  String _paymentMethod = 'in_person';
+  String _paymentType = 'full'; // 'full' | 'half'
+  String _paymentMethod = 'in_person'; // 'in_person' | 'online'
+  String _paymentChannel = 'gcash'; // 'gcash' | 'paymaya' | 'card'
   bool _isLoading = false;
 
   double get _amountToPay {
@@ -46,49 +51,34 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     if (_orderType == 'rush' || _orderType == 'bulk') {
       return 'pending_approval';
     }
+    // Online payments hold in payment_pending until PayMongo confirms
+    if (_paymentMethod == 'online') return 'payment_pending';
     return 'processing';
   }
 
-  Future<void> _placeOrder() async {
-    setState(() => _isLoading = true);
+  // ── In-person order placement (unchanged from existing flow) ─────────────
 
+  Future<void> _placeInPersonOrder() async {
+    setState(() => _isLoading = true);
     try {
       final uid = FirebaseAuth.instance.currentUser!.uid;
       final storeId = widget.items.first.storeId;
-
       final store = await _storeService.getStoreById(storeId);
-      final storeName = store?.storeName ?? '';
-
-      final orderItems = widget.items
-          .map(
-            (item) => {
-              'productId': item.productId,
-              'productName': item.productName,
-              'color': item.color,
-              'size': item.size,
-              'quantity': item.quantity,
-              'price': item.price,
-              'totalPrice': item.totalPrice,
-              'isPlain': item.isPlain,
-              'customDesignUrl': item.customDesignUrl,
-              'productImageUrl': item.productImageUrl,
-            },
-          )
-          .toList();
 
       final order = OrderModel(
         orderId: '',
         customerUid: uid,
         storeId: storeId,
-        storeName: storeName,
-        items: orderItems,
+        storeName: store?.storeName ?? '',
+        items: _buildOrderItems(),
         totalPrice: widget.totalAmount,
-        amountPaid: _amountToPay,
-        remainingBalance: _remainingBalance,
+        amountPaid: _paymentType == 'full' ? 0.0 : 0.0,
+        // In-person: amountPaid stays 0 until worker confirms at pickup
+        remainingBalance: widget.totalAmount,
         paymentType: _paymentType,
         orderType: _orderType,
         status: _initialStatus,
-        designType: _paymentMethod,
+        designType: 'in_person',
         specialInstructions: _instructionsController.text,
         createdAt: DateTime.now(),
       );
@@ -96,23 +86,22 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       await _orderService.placeOrder(order);
       await _cartService.clearCart(uid);
 
-      if (mounted) {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (context) => const OrderStatusScreen()),
-          (route) => route.isFirst,
-        );
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _orderType == 'normal'
-                  ? 'Order placed successfully!'
-                  : 'Order submitted! Waiting for owner approval.',
-            ),
-            backgroundColor: Colors.green,
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const OrderStatusScreen()),
+        (route) => route.isFirst,
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _orderType == 'normal'
+                ? 'Order placed! Pay at pickup.'
+                : 'Order submitted for owner approval.',
           ),
-        );
-      }
+          backgroundColor: Colors.green,
+        ),
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -120,9 +109,137 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         ).showSnackBar(SnackBar(content: Text('Failed to place order: $e')));
       }
     }
-
-    setState(() => _isLoading = false);
+    if (mounted) setState(() => _isLoading = false);
   }
+
+  // ── Online (PayMongo) order placement ─────────────────────────────────────
+
+  Future<void> _placeOnlineOrder() async {
+    setState(() => _isLoading = true);
+    try {
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      final storeId = widget.items.first.storeId;
+      final store = await _storeService.getStoreById(storeId);
+
+      // 1. Create a PayMongo payment link for the amount due now
+      final amountCentavos = PayMongoService.pesosToCentavos(_amountToPay);
+      final itemSummary = widget.items
+          .map((i) => '${i.productName} ×${i.quantity}')
+          .join(', ');
+      final description =
+          'ClothNear — ${store?.storeName ?? 'Store'}: $itemSummary';
+
+      final link = await PayMongoService.createPaymentLink(
+        amountInCentavos: amountCentavos,
+        description: description,
+        remarks: 'ClothNear order for $uid',
+      );
+
+      // 2. Save the order to Firestore with status 'payment_pending'
+      final order = OrderModel(
+        orderId: '',
+        customerUid: uid,
+        storeId: storeId,
+        storeName: store?.storeName ?? '',
+        items: _buildOrderItems(),
+        totalPrice: widget.totalAmount,
+        amountPaid: 0.0, // confirmed after PayMongo webhook/poll
+        remainingBalance: widget.totalAmount,
+        paymentType: _paymentType,
+        orderType: _orderType,
+        status: 'payment_pending',
+        designType: 'online',
+        specialInstructions: _instructionsController.text,
+        createdAt: DateTime.now(),
+        paymongoLinkId: link.linkId,
+        paymongoCheckoutUrl: link.checkoutUrl,
+        paymentChannel: _paymentChannel,
+        paymongoPaymentStatus: 'unpaid',
+      );
+
+      final orderId = await _orderService.placeOrder(order);
+      await _cartService.clearCart(uid);
+
+      // 3. Open PayMongo checkout in browser
+      final checkoutUri = Uri.parse(link.checkoutUrl);
+      if (await canLaunchUrl(checkoutUri)) {
+        await launchUrl(checkoutUri, mode: LaunchMode.externalApplication);
+      }
+
+      // 4. Navigate to PaymentPendingScreen which polls for confirmation
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PaymentPendingScreen(
+            orderId: orderId,
+            paymongoLinkId: link.linkId,
+            amountPaid: _amountToPay,
+            totalAmount: widget.totalAmount,
+            paymentType: _paymentType,
+            paymentChannel: _paymentChannel,
+          ),
+        ),
+        (route) => route.isFirst,
+      );
+    } on PayMongoException catch (e) {
+      if (mounted) {
+        _showErrorDialog('Payment Error', e.message);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to create payment: $e')));
+      }
+    }
+    if (mounted) setState(() => _isLoading = false);
+  }
+
+  Future<void> _handlePlaceOrder() async {
+    if (_paymentMethod == 'online') {
+      await _placeOnlineOrder();
+    } else {
+      await _placeInPersonOrder();
+    }
+  }
+
+  List<Map<String, dynamic>> _buildOrderItems() {
+    return widget.items
+        .map(
+          (item) => {
+            'productId': item.productId,
+            'productName': item.productName,
+            'color': item.color,
+            'size': item.size,
+            'quantity': item.quantity,
+            'price': item.price,
+            'totalPrice': item.totalPrice,
+            'isPlain': item.isPlain,
+            'customDesignUrl': item.customDesignUrl,
+            'productImageUrl': item.productImageUrl,
+          },
+        )
+        .toList();
+  }
+
+  void _showErrorDialog(String title, String message) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -148,7 +265,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Order type
+            // ── Order type ─────────────────────────────────────────────────
             _buildSectionTitle('Order Type'),
             const SizedBox(height: 8),
             Row(
@@ -178,41 +295,17 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 ),
               ],
             ),
-
             if (_orderType != 'normal') ...[
               const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.orange[50],
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.orange.shade200),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.info_outline,
-                      color: Colors.orange[700],
-                      size: 18,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'This order requires owner approval before processing.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.orange[800],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+              _buildInfoBanner(
+                'This order requires owner approval before processing.',
+                Colors.orange,
               ),
             ],
 
             const SizedBox(height: 20),
 
-            // Payment amount
+            // ── Payment amount ──────────────────────────────────────────────
             _buildSectionTitle('Payment Amount'),
             const SizedBox(height: 8),
             Row(
@@ -239,7 +332,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
             const SizedBox(height: 20),
 
-            // Payment method
+            // ── Payment method ──────────────────────────────────────────────
             _buildSectionTitle('Payment Method'),
             const SizedBox(height: 8),
             Row(
@@ -258,18 +351,51 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   child: _buildPaymentMethodCard(
                     'online',
                     'Pay Online',
-                    'Coming soon',
+                    EnvConfig.isPayMongoConfigured
+                        ? 'GCash, Maya, Card'
+                        : 'Not configured',
                     Icons.payment_outlined,
                     Colors.blue,
-                    comingSoon: true,
+                    disabled: !EnvConfig.isPayMongoConfigured,
                   ),
                 ),
               ],
             ),
 
+            // ── Payment channel (only when online is selected) ──────────────
+            if (_paymentMethod == 'online') ...[
+              const SizedBox(height: 16),
+              _buildSectionTitle('Payment Channel'),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  _buildChannelCard('gcash', 'GCash', '💚', Colors.green),
+                  const SizedBox(width: 8),
+                  _buildChannelCard('paymaya', 'Maya', '💙', Colors.blue),
+                  const SizedBox(width: 8),
+                  _buildChannelCard('card', 'Card', '💳', Colors.purple),
+                ],
+              ),
+              const SizedBox(height: 8),
+              _buildInfoBanner(
+                'You will be redirected to PayMongo\'s secure checkout page. '
+                'Return to the app after completing your payment.',
+                Colors.blue,
+              ),
+            ],
+
+            if (_paymentMethod == 'in_person' && _paymentType == 'half') ...[
+              const SizedBox(height: 8),
+              _buildInfoBanner(
+                'You pay ₱${_amountToPay.toStringAsFixed(0)} as a deposit. '
+                'The remaining ₱${_remainingBalance.toStringAsFixed(0)} is due at pickup.',
+                Colors.green,
+              ),
+            ],
+
             const SizedBox(height: 20),
 
-            // Order items summary
+            // ── Items summary ───────────────────────────────────────────────
             _buildSectionTitle('Items'),
             const SizedBox(height: 8),
             Container(
@@ -286,7 +412,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Row(
                         children: [
-                          // Product image
                           Container(
                             width: 40,
                             height: 40,
@@ -300,13 +425,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                     child: Image.network(
                                       item.productImageUrl,
                                       fit: BoxFit.cover,
-                                      errorBuilder: (context, error, stack) =>
-                                          const Center(
-                                            child: Text(
-                                              '👕',
-                                              style: TextStyle(fontSize: 18),
-                                            ),
-                                          ),
+                                      errorBuilder: (_, _, _) => const Center(
+                                        child: Text(
+                                          '👕',
+                                          style: TextStyle(fontSize: 18),
+                                        ),
+                                      ),
                                     ),
                                   )
                                 : const Center(
@@ -360,66 +484,32 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     ),
                   ),
                   const Divider(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Total',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        '₱${widget.totalAmount.toStringAsFixed(2)}',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.red[600],
-                        ),
-                      ),
-                    ],
+                  _buildTotalRow(
+                    'Total',
+                    '₱${widget.totalAmount.toStringAsFixed(2)}',
+                    isBold: true,
                   ),
                   if (_paymentType == 'half') ...[
                     const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Due now',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                        Text(
-                          '₱${_amountToPay.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.blue[700],
-                          ),
-                        ),
-                      ],
+                    _buildTotalRow(
+                      _paymentMethod == 'online'
+                          ? 'Pay now (online)'
+                          : 'Deposit due now',
+                      '₱${_amountToPay.toStringAsFixed(2)}',
+                      color: Colors.blue[700]!,
                     ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Balance on pickup',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                        Text(
-                          '₱${_remainingBalance.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ],
+                    _buildTotalRow(
+                      'Balance at pickup',
+                      '₱${_remainingBalance.toStringAsFixed(2)}',
+                      color: Colors.grey[500]!,
+                    ),
+                  ],
+                  if (_paymentType == 'full' && _paymentMethod == 'online') ...[
+                    const SizedBox(height: 4),
+                    _buildTotalRow(
+                      'Paying online now',
+                      '₱${_amountToPay.toStringAsFixed(2)}',
+                      color: Colors.blue[700]!,
                     ),
                   ],
                 ],
@@ -428,7 +518,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
             const SizedBox(height: 20),
 
-            // Special instructions
+            // ── Special instructions ────────────────────────────────────────
             _buildSectionTitle('Special Instructions (Optional)'),
             const SizedBox(height: 8),
             TextField(
@@ -448,12 +538,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
             const SizedBox(height: 24),
 
-            // Place order button
+            // ── Place order button ──────────────────────────────────────────
             SizedBox(
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
-                onPressed: _isLoading ? null : _placeOrder,
+                onPressed: _isLoading ? null : _handlePlaceOrder,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue[700],
                   shape: RoundedRectangleBorder(
@@ -463,9 +553,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 child: _isLoading
                     ? const CircularProgressIndicator(color: Colors.white)
                     : Text(
-                        _orderType == 'normal'
-                            ? 'Place Order — ₱${_amountToPay.toStringAsFixed(0)}'
-                            : 'Submit for Approval',
+                        _buildButtonLabel(),
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -481,6 +569,29 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
+  String _buildButtonLabel() {
+    if (_orderType != 'normal') return 'Submit for Approval';
+    if (_paymentMethod == 'online') {
+      return 'Pay ₱${_amountToPay.toStringAsFixed(0)} via ${_channelLabel(_paymentChannel)}';
+    }
+    return 'Place Order — Pay at Pickup';
+  }
+
+  String _channelLabel(String channel) {
+    switch (channel) {
+      case 'gcash':
+        return 'GCash';
+      case 'paymaya':
+        return 'Maya';
+      case 'card':
+        return 'Card';
+      default:
+        return 'Online';
+    }
+  }
+
+  // ── Widget builders ───────────────────────────────────────────────────────
+
   Widget _buildSectionTitle(String title) {
     return Text(
       title,
@@ -489,6 +600,61 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         fontWeight: FontWeight.bold,
         color: Colors.grey[700],
       ),
+    );
+  }
+
+  Widget _buildInfoBanner(String message, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline, color: color, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                fontSize: 12,
+                color: color.withValues(alpha: 0.9),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTotalRow(
+    String label,
+    String value, {
+    bool isBold = false,
+    Color? color,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: isBold ? 15 : 13,
+            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+            color: color ?? Colors.grey[700],
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: isBold ? 16 : 13,
+            fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+            color: color ?? (isBold ? Colors.red[600] : Colors.grey[700]),
+          ),
+        ),
+      ],
     );
   }
 
@@ -593,75 +759,112 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     String subtitle,
     IconData icon,
     Color color, {
-    bool comingSoon = false,
+    bool disabled = false,
   }) {
-    final isSelected = _paymentMethod == method && !comingSoon;
-    return GestureDetector(
-      onTap: comingSoon
-          ? () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Online payment coming soon in Phase 6!'),
-                duration: Duration(seconds: 2),
-              ),
-            )
-          : () => setState(() => _paymentMethod = method),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: comingSoon
-              ? Colors.grey[50]
-              : isSelected
-              ? color.withValues(alpha: 0.1)
-              : Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: comingSoon
-                ? Colors.grey.shade200
+    final isSelected = _paymentMethod == method && !disabled;
+    return Expanded(
+      child: GestureDetector(
+        onTap: disabled
+            ? () => ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(EnvConfig.paymongoConfigHint),
+                  duration: const Duration(seconds: 4),
+                ),
+              )
+            : () => setState(() => _paymentMethod = method),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: disabled
+                ? Colors.grey[50]
                 : isSelected
-                ? color
-                : Colors.grey.shade300,
-            width: isSelected ? 2 : 1,
+                ? color.withValues(alpha: 0.1)
+                : Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: disabled
+                  ? Colors.grey.shade200
+                  : isSelected
+                  ? color
+                  : Colors.grey.shade300,
+              width: isSelected ? 2 : 1,
+            ),
           ),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: comingSoon ? Colors.grey[300] : color, size: 26),
-            const SizedBox(height: 6),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: comingSoon
-                    ? Colors.grey[400]
+          child: Column(
+            children: [
+              Icon(
+                icon,
+                color: disabled
+                    ? Colors.grey[300]
                     : isSelected
                     ? color
-                    : Colors.grey[700],
+                    : Colors.grey,
+                size: 26,
               ),
-              textAlign: TextAlign.center,
-            ),
-            Text(
-              subtitle,
-              style: TextStyle(
-                fontSize: 10,
-                color: comingSoon ? Colors.grey[300] : Colors.grey[500],
-              ),
-              textAlign: TextAlign.center,
-            ),
-            if (comingSoon)
-              Container(
-                margin: const EdgeInsets.only(top: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                  borderRadius: BorderRadius.circular(4),
+              const SizedBox(height: 6),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: disabled
+                      ? Colors.grey[400]
+                      : isSelected
+                      ? color
+                      : Colors.grey[700],
                 ),
-                child: Text(
-                  'Coming Soon',
-                  style: TextStyle(fontSize: 8, color: Colors.grey[500]),
-                ),
+                textAlign: TextAlign.center,
               ),
-          ],
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: disabled ? Colors.grey[300] : Colors.grey[500],
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChannelCard(
+    String channel,
+    String label,
+    String emoji,
+    Color color,
+  ) {
+    final isSelected = _paymentChannel == channel;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _paymentChannel = channel),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected ? color.withValues(alpha: 0.1) : Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isSelected ? color : Colors.grey.shade300,
+              width: isSelected ? 2 : 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              Text(emoji, style: const TextStyle(fontSize: 24)),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: isSelected ? color : Colors.grey[600],
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       ),
     );

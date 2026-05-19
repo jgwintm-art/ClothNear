@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 
 key = os.environ.get("GEMINI_API_KEY", "").strip()
+paymongo_key = os.environ.get("PAYMONGO_SECRET_KEY", "").strip()
+
 if not key:
     raise SystemExit("GEMINI_API_KEY environment variable is empty")
 
@@ -14,7 +16,10 @@ out.write_text(
 abstract class ApiSecrets {{
   static const String geminiApiKey = {json.dumps(key)};
   static const String geminiModel = 'gemini-2.5-flash';
+  static const String paymongoSecretKey = {json.dumps(paymongo_key)};
 }}
 """,
     encoding="utf-8",
 )
+
+print(f"api_secrets.dart written (PayMongo configured: {bool(paymongo_key)})")
