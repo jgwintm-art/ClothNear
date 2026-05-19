@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../services/paymongo_service.dart';
+import '../../../services/order_service.dart';
 import 'order_status_screen.dart';
 
 /// Shown immediately after the customer is sent to PayMongo's checkout page.
@@ -95,20 +95,12 @@ class _PaymentPendingScreenState extends State<PaymentPendingScreen> {
 
   Future<void> _confirmPaymentInFirestore() async {
     try {
-      final remaining = widget.paymentType == 'full'
-          ? 0.0
-          : widget.totalAmount - widget.amountPaid;
-
-      await FirebaseFirestore.instance
-          .collection('orders')
-          .doc(widget.orderId)
-          .update({
-            'status': 'processing',
-            'amountPaid': widget.amountPaid,
-            'remainingBalance': remaining,
-            'paymongoPaymentStatus': 'paid',
-            'paymentConfirmedAt': DateTime.now().millisecondsSinceEpoch,
-          });
+      await OrderService().confirmOnlinePayment(
+        orderId: widget.orderId,
+        amountPaid: widget.amountPaid,
+        totalPrice: widget.totalAmount,
+        paymentChannel: widget.paymentChannel,
+      );
 
       if (!mounted) return;
       setState(() {

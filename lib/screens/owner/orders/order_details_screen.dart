@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../models/order_model.dart';
 import '../../../services/order_service.dart';
 
@@ -390,27 +391,116 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                   _buildCard(
                     title: 'Payment',
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Payment status badge row
+                        Row(
+                          children: [
+                            _paymentStatusBadge(_order.resolvedPaymentStatus),
+                            const SizedBox(width: 8),
+                            _methodBadge(_order),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
                         _buildRow(
                           'Total',
-                          '₱${_order.totalPrice.toStringAsFixed(0)}',
+                          '₱${_order.totalPrice.toStringAsFixed(2)}',
                         ),
                         _buildRow(
                           'Amount Paid',
-                          '₱${_order.amountPaid.toStringAsFixed(0)}',
+                          '₱${_order.amountPaid.toStringAsFixed(2)}',
+                          valueColor: Colors.green[700],
                         ),
                         if (_order.remainingBalance > 0)
                           _buildRow(
                             'Balance Due',
-                            '₱${_order.remainingBalance.toStringAsFixed(0)}',
+                            '₱${_order.remainingBalance.toStringAsFixed(2)}',
                             valueColor: Colors.orange[700],
                           ),
                         _buildRow(
                           'Payment Type',
                           _order.paymentType == 'full'
                               ? 'Full Payment'
-                              : 'Half Payment',
+                              : 'Half Payment (50% upfront)',
                         ),
+                        // Confirmed timestamp
+                        if (_order.paymentConfirmedAtDateTime != null)
+                          _buildRow(
+                            'Paid On',
+                            _formatDate(_order.paymentConfirmedAtDateTime!),
+                            valueColor: Colors.green[700],
+                          ),
+                        // Confirmer
+                        if (_order.paymentConfirmedBy != null &&
+                            _order.paymentConfirmedBy!.isNotEmpty)
+                          _buildRow(
+                            'Confirmed By',
+                            _order.paymentConfirmedBy == 'system'
+                                ? '🤖 Auto (PayMongo)'
+                                : '👤 ${_order.paymentConfirmedBy}',
+                          ),
+                        // PayMongo reference
+                        if (_order.paymongoLinkId != null &&
+                            _order.paymongoLinkId!.isNotEmpty) ...[
+                          _buildRow('PayMongo Link', _order.paymongoLinkId!),
+                        ],
+                        if (_order.paymongoPaymentId != null &&
+                            _order.paymongoPaymentId!.isNotEmpty)
+                          GestureDetector(
+                            onTap: () {
+                              Clipboard.setData(
+                                ClipboardData(text: _order.paymongoPaymentId!),
+                              );
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('PayMongo ID copied'),
+                                  duration: Duration(seconds: 1),
+                                ),
+                              );
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Row(
+                                children: [
+                                  Text(
+                                    'Payment ID',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  Text(
+                                    _order.paymongoPaymentId!,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.blue[700],
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    Icons.copy,
+                                    size: 14,
+                                    color: Colors.grey[400],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        if (_order.paymentNote != null &&
+                            _order.paymentNote!.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'Note: ${_order.paymentNote}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -584,6 +674,69 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                 ],
               ),
             ),
+    );
+  }
+
+  Widget _paymentStatusBadge(String ps) {
+    Color bg, fg;
+    String label;
+    switch (ps) {
+      case 'paid':
+        bg = Colors.green[50]!;
+        fg = Colors.green[700]!;
+        label = '✓ Paid';
+        break;
+      case 'partial':
+        bg = Colors.orange[50]!;
+        fg = Colors.orange[700]!;
+        label = 'Partially Paid';
+        break;
+      case 'pending_online':
+        bg = Colors.blue[50]!;
+        fg = Colors.blue[700]!;
+        label = 'Awaiting Online Payment';
+        break;
+      case 'void':
+        bg = Colors.grey[100]!;
+        fg = Colors.grey[500]!;
+        label = 'Void';
+        break;
+      default:
+        bg = Colors.red[50]!;
+        fg = Colors.red[700]!;
+        label = 'Unpaid';
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 12, color: fg, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
+  Widget _methodBadge(OrderModel order) {
+    final label = order.isOnlinePayment
+        ? order.paymentChannelDisplay
+        : 'In-Person / Cash';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: order.isOnlinePayment ? Colors.blue[50] : Colors.grey[100],
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          color: order.isOnlinePayment ? Colors.blue[700] : Colors.grey[700],
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 

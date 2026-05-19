@@ -184,6 +184,18 @@ class AuthService {
     await batch.commit();
   }
 
+  // ── Lookup a user by UID (used for payment confirmer names) ──────────────────
+
+  Future<UserModel?> getUserById(String uid) async {
+    try {
+      final doc = await _firestore.collection('users').doc(uid).get();
+      if (!doc.exists) return null;
+      return UserModel.fromMap(doc.data()!..['uid'] = uid);
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ─── LOGOUT ──────────────────────────────────────────────────────────────────
 
   Future<void> logout() async {

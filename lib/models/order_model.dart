@@ -32,6 +32,26 @@ class OrderModel {
   /// null = not an online payment (in-person order)
   final String? paymongoPaymentStatus;
 
+  // ── Payment audit / tracking fields ─────────────────────────────────────────
+
+  /// ISO timestamp (ms epoch) when payment was confirmed (auto or manual).
+  final int? paymentConfirmedAt;
+
+  /// UID or display name of the staff member who confirmed a manual payment.
+  /// 'system' for auto-confirmed PayMongo payments.
+  final String? paymentConfirmedBy;
+
+  /// Human-readable method: 'gcash' | 'paymaya' | 'card' | 'cash' | 'partial_cash'
+  /// Distinct from [paymentChannel] (which is the PayMongo channel enum).
+  final String? paymentMethod;
+
+  /// PayMongo payment object ID (e.g. 'pay_xxxx') returned by the webhook/poll.
+  /// Immutable once set — provides a permanent audit reference.
+  final String? paymongoPaymentId;
+
+  /// Optional note added by staff when confirming a manual/cash payment.
+  final String? paymentNote;
+
   OrderModel({
     required this.orderId,
     required this.customerUid,
@@ -54,6 +74,12 @@ class OrderModel {
     this.paymongoCheckoutUrl,
     this.paymentChannel,
     this.paymongoPaymentStatus,
+    // Payment audit
+    this.paymentConfirmedAt,
+    this.paymentConfirmedBy,
+    this.paymentMethod,
+    this.paymongoPaymentId,
+    this.paymentNote,
   });
 
   factory OrderModel.fromMap(Map<String, dynamic> map, String id) {
@@ -85,6 +111,12 @@ class OrderModel {
       paymongoCheckoutUrl: map['paymongoCheckoutUrl'] as String?,
       paymentChannel: map['paymentChannel'] as String?,
       paymongoPaymentStatus: map['paymongoPaymentStatus'] as String?,
+      // Payment audit
+      paymentConfirmedAt: map['paymentConfirmedAt'] as int?,
+      paymentConfirmedBy: map['paymentConfirmedBy'] as String?,
+      paymentMethod: map['paymentMethod'] as String?,
+      paymongoPaymentId: map['paymongoPaymentId'] as String?,
+      paymentNote: map['paymentNote'] as String?,
     );
   }
 
@@ -116,10 +148,19 @@ class OrderModel {
     if (paymongoPaymentStatus != null) {
       m['paymongoPaymentStatus'] = paymongoPaymentStatus;
     }
+    // Payment audit fields — only write when present
+    if (paymentConfirmedAt != null) {
+      m['paymentConfirmedAt'] = paymentConfirmedAt;
+    }
+    if (paymentConfirmedBy != null) {
+      m['paymentConfirmedBy'] = paymentConfirmedBy;
+    }
+    if (paymentMethod != null) m['paymentMethod'] = paymentMethod;
+    if (paymongoPaymentId != null) m['paymongoPaymentId'] = paymongoPaymentId;
+    if (paymentNote != null) m['paymentNote'] = paymentNote;
     return m;
   }
 
-  /// Creates a copy of this order with selected fields replaced.
   OrderModel copyWith({
     String? status,
     double? amountPaid,
@@ -128,6 +169,11 @@ class OrderModel {
     String? paymongoCheckoutUrl,
     String? paymentChannel,
     String? paymongoPaymentStatus,
+    int? paymentConfirmedAt,
+    String? paymentConfirmedBy,
+    String? paymentMethod,
+    String? paymongoPaymentId,
+    String? paymentNote,
   }) {
     return OrderModel(
       orderId: orderId,
@@ -151,6 +197,11 @@ class OrderModel {
       paymentChannel: paymentChannel ?? this.paymentChannel,
       paymongoPaymentStatus:
           paymongoPaymentStatus ?? this.paymongoPaymentStatus,
+      paymentConfirmedAt: paymentConfirmedAt ?? this.paymentConfirmedAt,
+      paymentConfirmedBy: paymentConfirmedBy ?? this.paymentConfirmedBy,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      paymongoPaymentId: paymongoPaymentId ?? this.paymongoPaymentId,
+      paymentNote: paymentNote ?? this.paymentNote,
     );
   }
 
@@ -199,6 +250,59 @@ class OrderModel {
 
   bool get isPaymentConfirmed =>
       isOnlinePayment ? paymongoPaymentStatus == 'paid' : remainingBalance <= 0;
+
+  /// Resolved payment method label for display in dashboards.
+  String get paymentMethodDisplay {
+    if (paymentMethod != null) {
+      switch (paymentMethod) {
+        case 'gcash':
+          return 'GCash';
+        case 'paymaya':
+          return 'Maya';
+        case 'card':
+          return 'Card';
+        case 'cash':
+          return 'Cash';
+        case 'partial_cash':
+          return 'Cash (Partial)';
+      }
+    }
+    // Fallback: derive from paymentChannel / isOnlinePayment
+    if (isOnlinePayment) return paymentChannelDisplay;
+    return 'In-Person / Cash';
+  }
+
+  /// Derived payment status for owner/worker dashboards.
+  /// More granular than [paymongoPaymentStatus].
+  String get resolvedPaymentStatus {
+    if (status == 'payment_pending') return 'pending_online';
+    if (status == 'cancelled' || status == 'rejected') return 'void';
+    if (isPaymentConfirmed && remainingBalance <= 0) return 'paid';
+    if (amountPaid > 0 && remainingBalance > 0) return 'partial';
+    if (!isPaymentConfirmed && remainingBalance > 0) return 'unpaid';
+    return 'unpaid';
+  }
+
+  String get resolvedPaymentStatusDisplay {
+    switch (resolvedPaymentStatus) {
+      case 'paid':
+        return 'Paid';
+      case 'partial':
+        return 'Partially Paid';
+      case 'pending_online':
+        return 'Awaiting Online Payment';
+      case 'unpaid':
+        return 'Unpaid';
+      case 'void':
+        return 'Void';
+      default:
+        return 'Unknown';
+    }
+  }
+
+  DateTime? get paymentConfirmedAtDateTime => paymentConfirmedAt != null
+      ? DateTime.fromMillisecondsSinceEpoch(paymentConfirmedAt!)
+      : null;
 
   String get paymentChannelDisplay {
     switch (paymentChannel) {
