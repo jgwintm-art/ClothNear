@@ -7,12 +7,27 @@ import 'api_secrets.dart';
 ///   3. .env file (local development)
 class EnvConfig {
   static Future<void> load() async {
-    // If any compile-time secret is already present, skip .env load.
-    if (geminiApiKey.isNotEmpty) return;
+    // Only skip .env loading if a compile-time key is already baked in.
+    // Do NOT read dotenv.env here — it isn't loaded yet and will throw
+    // NotInitializedError.
+    if (ApiSecrets.geminiApiKey.isNotEmpty) return;
+    const fromDefine = String.fromEnvironment('GEMINI_API_KEY');
+    if (fromDefine.isNotEmpty) return;
+
     try {
       await dotenv.load(fileName: '.env');
     } catch (_) {
       // .env is optional in CI — keys come from ApiSecrets or --dart-define.
+    }
+  }
+
+  /// Safe dotenv accessor — returns empty string instead of throwing
+  /// NotInitializedError when dotenv hasn't been loaded yet.
+  static String _env(String key) {
+    try {
+      return dotenv.env[key] ?? '';
+    } catch (_) {
+      return '';
     }
   }
 
@@ -22,14 +37,16 @@ class EnvConfig {
     if (ApiSecrets.geminiApiKey.isNotEmpty) return ApiSecrets.geminiApiKey;
     const fromDefine = String.fromEnvironment('GEMINI_API_KEY');
     if (fromDefine.isNotEmpty) return fromDefine;
-    return dotenv.env['GEMINI_API_KEY'] ?? '';
+    return _env('GEMINI_API_KEY');
   }
 
   static String get geminiModel {
     if (ApiSecrets.geminiModel.isNotEmpty) return ApiSecrets.geminiModel;
     const fromDefine = String.fromEnvironment('GEMINI_MODEL');
     if (fromDefine.isNotEmpty) return fromDefine;
-    return dotenv.env['GEMINI_MODEL'] ?? 'gemini-2.5-flash';
+    return _env('GEMINI_MODEL').isNotEmpty
+        ? _env('GEMINI_MODEL')
+        : 'gemini-2.5-flash';
   }
 
   static String get geminiConfigurationHint {
@@ -49,37 +66,33 @@ class EnvConfig {
   // The secret key lives inside the Cloudflare Worker (server-side only)
   // and is never embedded in the Flutter bundle.
 
-  /// Whether online payment via PayMongo is enabled in this build.
-  /// Controlled by PAYMONGO_ENABLED=true in .env or CI secrets.
-  /// Defaults to true if the legacy PAYMONGO_SECRET_KEY is present (backwards compat).
   static bool get isPayMongoConfigured {
-    // New flag: explicit opt-in/out
-    final enabled = dotenv.env['PAYMONGO_ENABLED'] ??
-        const String.fromEnvironment('PAYMONGO_ENABLED');
-    if (enabled == 'true') return true;
-    if (enabled == 'false') return false;
+    const fromDefine = String.fromEnvironment('PAYMONGO_ENABLED');
+    if (fromDefine == 'true') return true;
+    if (fromDefine == 'false') return false;
 
-    // Legacy backwards-compat: if old secret key is present in env, treat as enabled.
-    // This keeps local .env files working without changes.
-    final legacyKey = ApiSecrets.paymongoSecretKey.isNotEmpty
-        ? ApiSecrets.paymongoSecretKey
-        : (dotenv.env['PAYMONGO_SECRET_KEY'] ??
-            const String.fromEnvironment('PAYMONGO_SECRET_KEY'));
-    return legacyKey.isNotEmpty;
+    final fromEnv = _env('PAYMONGO_ENABLED');
+    if (fromEnv == 'true') return true;
+    if (fromEnv == 'false') return false;
+
+    // Legacy backwards-compat: secret key present in env = enabled.
+    if (ApiSecrets.paymongoSecretKey.isNotEmpty) return true;
+    const legacyDefine = String.fromEnvironment('PAYMONGO_SECRET_KEY');
+    if (legacyDefine.isNotEmpty) return true;
+    if (_env('PAYMONGO_SECRET_KEY').isNotEmpty) return true;
+
+    return false;
   }
 
-  /// Base URL for the Firebase Cloud Function proxy.
-  /// Override in .env for local emulator or non-default regions.
   static String get paymongoFunctionsBase {
     const fromDefine = String.fromEnvironment('PAYMONGO_FUNCTIONS_BASE');
     if (fromDefine.isNotEmpty) return fromDefine;
-    return dotenv.env['PAYMONGO_FUNCTIONS_BASE'] ?? '';
+    return _env('PAYMONGO_FUNCTIONS_BASE');
   }
 
   static String get paymongoConfigHint {
     if (isPayMongoConfigured) return '';
     return 'Online payments are not configured. '
-        'Set PAYMONGO_SECRET_KEY in Firebase Secret Manager and '
-        'set PAYMONGO_ENABLED=true in your .env or CI secrets.';
+        'Set PAYMONGO_ENABLED=true in your .env or CI secrets.';
   }
 }
