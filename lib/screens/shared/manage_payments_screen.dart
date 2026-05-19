@@ -255,7 +255,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: orders.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 10),
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (_, i) => _buildCard(orders[i]),
     );
   }

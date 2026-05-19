@@ -4,42 +4,47 @@ import '../config/env_config.dart';
 
 /// PayMongo payment integration using the Links API.
 ///
-/// The Links API is the correct choice for Flutter Web + Firebase Hosting
-/// because it does not require a backend server. The secret key creates a
-/// hosted checkout URL; the customer pays on PayMongo's own page.
+/// Flutter Web cannot call api.paymongo.com directly because the browser
+/// blocks cross-origin requests (CORS). All PayMongo calls are routed through
+/// Firebase Cloud Functions which run server-side and are not subject to CORS.
+///
+/// Function endpoints (same Firebase project, same origin on web):
+///   POST /paymongo_create_link  — creates a hosted checkout link
+///   GET  /paymongo_get_link     — polls link payment status
+///
+/// The secret key lives in Firebase Secret Manager (set via
+/// `firebase functions:secrets:set PAYMONGO_SECRET_KEY`).
+/// It is never embedded in the Flutter bundle.
 ///
 /// Supported channels: GCash, Maya (PayMaya), Credit/Debit Card.
-///
-/// SETUP — add these to your .env (local) and GitHub Secrets (CI):
-///   PAYMONGO_SECRET_KEY=sk_test_xxxx    ← test key during development
-///   PAYMONGO_SECRET_KEY=sk_live_xxxx    ← switch to live before going public
-///
-/// Get keys at: https://dashboard.paymongo.com/developers
 
 class PayMongoService {
-  static const String _baseUrl = 'https://api.paymongo.com/v1';
-
-  static String get _secretKey => EnvConfig.paymongoSecretKey;
-
-  static String get _basicAuth {
-    final key = _secretKey;
-    if (key.isEmpty) return '';
-    // PayMongo uses HTTP Basic auth: base64(secretKey + ':')
-    return 'Basic ${base64Encode(utf8.encode('$key:'))}';
+  /// Base URL for the Firebase Cloud Function proxy.
+  ///
+  /// During local development (flutter run -d chrome) this points to the
+  /// Functions emulator. In production it points to the deployed functions.
+  ///
+  /// Override via PAYMONGO_FUNCTIONS_BASE in .env for custom regions/projects.
+  static String get _functionsBase {
+    // Allow override from env (useful for non-default regions)
+    final override = EnvConfig.paymongoFunctionsBase;
+    if (override.isNotEmpty) return override;
+    // Default: Firebase Functions for project clothnear (us-central1)
+    return 'https://us-central1-clothnear.cloudfunctions.net';
   }
 
   static bool get isConfigured => EnvConfig.isPayMongoConfigured;
 
   // ── Create payment link ────────────────────────────────────────────────────
 
-  /// Creates a PayMongo payment link.
+  /// Creates a PayMongo payment link via the server-side Firebase Function.
   ///
   /// [amountInCentavos]  amount in centavos  (₱1 = 100 centavos)
-  /// [description]       shown on the checkout page (e.g. "ClothNear Order")
-  /// [remarks]           internal ref, not shown to customer (e.g. orderId)
+  /// [description]       shown on the checkout page
+  /// [remarks]           internal ref (e.g. orderId), not shown to customer
   ///
   /// Returns [PayMongoLink] containing the checkout URL and link ID.
-  /// Throws [PayMongoException] on API errors.
+  /// Throws [PayMongoException] on API or network errors.
   static Future<PayMongoLink> createPaymentLink({
     required int amountInCentavos,
     required String description,
@@ -48,37 +53,38 @@ class PayMongoService {
     _assertConfigured();
 
     final body = jsonEncode({
-      'data': {
-        'attributes': {
-          'amount': amountInCentavos,
-          'description': description,
-          if (remarks.isNotEmpty) 'remarks': remarks,
-        },
-      },
+      'amountInCentavos': amountInCentavos,
+      'description': description,
+      if (remarks.isNotEmpty) 'remarks': remarks,
     });
 
-    final response = await http
-        .post(
-          Uri.parse('$_baseUrl/links'),
-          headers: {
-            'Authorization': _basicAuth,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-          body: body,
-        )
-        .timeout(const Duration(seconds: 20));
+    final http.Response response;
+    try {
+      response = await http
+          .post(
+            Uri.parse('$_functionsBase/paymongo_create_link'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: body,
+          )
+          .timeout(const Duration(seconds: 30));
+    } catch (e) {
+      throw PayMongoException(
+        'Network error reaching payment service. '
+        'Check your internet connection and try again.\n(Detail: $e)',
+      );
+    }
 
     _assertSuccess(response);
 
     final data = jsonDecode(response.body) as Map<String, dynamic>;
-    final attrs = (data['data'] as Map)['attributes'] as Map<String, dynamic>;
-
     return PayMongoLink(
-      linkId: (data['data'] as Map)['id'] as String,
-      checkoutUrl: attrs['checkout_url'] as String,
-      referenceNumber: attrs['reference_number'] as String? ?? '',
-      status: attrs['status'] as String? ?? 'unpaid',
+      linkId: data['linkId'] as String,
+      checkoutUrl: data['checkoutUrl'] as String,
+      referenceNumber: data['referenceNumber'] as String? ?? '',
+      status: data['status'] as String? ?? 'unpaid',
       amountInCentavos: amountInCentavos,
     );
   }
@@ -93,18 +99,14 @@ class PayMongoService {
     try {
       final response = await http
           .get(
-            Uri.parse('$_baseUrl/links/$linkId'),
-            headers: {
-              'Authorization': _basicAuth,
-              'Accept': 'application/json',
-            },
+            Uri.parse('$_functionsBase/paymongo_get_link?linkId=$linkId'),
+            headers: {'Accept': 'application/json'},
           )
           .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
-        return (data['data'] as Map)['attributes']['status'] as String? ??
-            'unknown';
+        return data['status'] as String? ?? 'unknown';
       }
       return 'unknown';
     } catch (_) {
@@ -118,8 +120,8 @@ class PayMongoService {
     if (!isConfigured) {
       throw PayMongoException(
         'PayMongo is not configured.\n'
-        'Add PAYMONGO_SECRET_KEY to your .env file (local) '
-        'or GitHub Secrets (CI).\n'
+        'Add PAYMONGO_SECRET_KEY to Firebase Secret Manager:\n'
+        '  firebase functions:secrets:set PAYMONGO_SECRET_KEY\n'
         'Get your keys at https://dashboard.paymongo.com/developers',
       );
     }
@@ -129,18 +131,15 @@ class PayMongoService {
     if (response.statusCode == 200 || response.statusCode == 201) return;
     try {
       final body = jsonDecode(response.body) as Map<String, dynamic>;
-      final errors = body['errors'] as List?;
-      if (errors != null && errors.isNotEmpty) {
-        final detail =
-            errors.first['detail'] as String? ??
-            'PayMongo error (${response.statusCode})';
-        throw PayMongoException(detail);
+      final error = body['error'] as String?;
+      if (error != null && error.isNotEmpty) {
+        throw PayMongoException(error);
       }
     } catch (e) {
       if (e is PayMongoException) rethrow;
     }
     throw PayMongoException(
-      'PayMongo returned ${response.statusCode}: ${response.body}',
+      'Payment service returned ${response.statusCode}: ${response.body}',
     );
   }
 

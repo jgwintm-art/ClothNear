@@ -929,6 +929,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // ── Live price viewer ───────────────────────────────────────
+                _buildLivePricePanel(),
                 // ✅ NEW: hint text if not ready
                 if (!_isReadyToAdd && _isCombinationValid)
                   Padding(
@@ -1013,6 +1015,123 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildLivePricePanel() {
+    // Nothing to show until a variant is selected
+    if (_selectedVariant == null) return const SizedBox.shrink();
+
+    final unitPrice = _selectedVariant!.price;
+    final subtotal = unitPrice * _quantity;
+
+    // Custom design adds a note but no extra charge in this pricing model.
+    // If the store adds a design surcharge in future, wire it in here.
+    final bool hasCustomDesign = _isPlain == false && _customDesignUrl.isNotEmpty;
+
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeInOut,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.blue[50],
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.blue.shade200),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header row
+            Row(
+              children: [
+                Icon(Icons.receipt_outlined, size: 14, color: Colors.blue[700]),
+                const SizedBox(width: 6),
+                Text(
+                  'Price Summary',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue[700],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // Unit price × quantity
+            _priceLine(
+              '₱${unitPrice.toStringAsFixed(2)}  ×  $_quantity',
+              '₱${subtotal.toStringAsFixed(2)}',
+              labelColor: Colors.grey[600]!,
+              valueColor: Colors.grey[800]!,
+            ),
+
+            // Custom design note
+            if (hasCustomDesign) ...[
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(Icons.palette_outlined,
+                      size: 12, color: Colors.purple[600]),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Custom design included',
+                    style: TextStyle(fontSize: 11, color: Colors.purple[600]),
+                  ),
+                ],
+              ),
+            ],
+
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 6),
+              child: Divider(height: 1),
+            ),
+
+            // Total
+            _priceLine(
+              'Total',
+              '₱${subtotal.toStringAsFixed(2)}',
+              labelColor: Colors.black,
+              valueColor: const Color(0xFFE53935),
+              bold: true,
+              valueFontSize: 16,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _priceLine(
+    String label,
+    String value, {
+    required Color labelColor,
+    required Color valueColor,
+    bool bold = false,
+    double valueFontSize = 13,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            color: labelColor,
+            fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: valueFontSize,
+            color: valueColor,
+            fontWeight: bold ? FontWeight.bold : FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 

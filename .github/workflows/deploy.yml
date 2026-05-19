@@ -26,23 +26,29 @@ jobs:
             echo "::error::GEMINI_API_KEY secret is empty. Set it under Settings → Secrets → Actions."
             exit 1
           fi
-          # PayMongo key is optional — app degrades gracefully without it
+          # PayMongo key lives in Firebase Secret Manager (server-side only).
+          # It is NOT embedded in the Flutter bundle — no check needed here.
           if [ -z "${{ secrets.PAYMONGO_SECRET_KEY }}" ]; then
-            echo "::warning::PAYMONGO_SECRET_KEY is not set. Online payments will be disabled in this build."
+            echo "::warning::PAYMONGO_SECRET_KEY GitHub secret is not set."
+            echo "::warning::Online payments will be disabled until you run:"
+            echo "::warning::  firebase functions:secrets:set PAYMONGO_SECRET_KEY"
           fi
 
       - name: Create .env for Flutter asset bundle
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          PAYMONGO_SECRET_KEY: ${{ secrets.PAYMONGO_SECRET_KEY }}
         run: |
-          printf 'GEMINI_API_KEY=%s\nGEMINI_MODEL=gemini-2.5-flash\nPAYMONGO_SECRET_KEY=%s\n' \
-            "$GEMINI_API_KEY" "$PAYMONGO_SECRET_KEY" > .env
+          # PAYMONGO_SECRET_KEY is intentionally NOT written to .env here.
+          # It lives in Firebase Secret Manager and is accessed server-side only.
+          # PAYMONGO_ENABLED=true tells the Flutter app that the function is live.
+          printf 'GEMINI_API_KEY=%s\nGEMINI_MODEL=gemini-2.5-flash\nPAYMONGO_ENABLED=true\n' \
+            "$GEMINI_API_KEY" > .env
 
       - name: Inject compile-time API secrets
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          PAYMONGO_SECRET_KEY: ${{ secrets.PAYMONGO_SECRET_KEY }}
+          # PayMongo key intentionally omitted — stays server-side only
+          PAYMONGO_SECRET_KEY: ""
         run: python3 scripts/write_api_secrets.py
 
       - name: Install dependencies
@@ -51,16 +57,34 @@ jobs:
       - name: Build web release
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          PAYMONGO_SECRET_KEY: ${{ secrets.PAYMONGO_SECRET_KEY }}
         run: |
           flutter build web --release \
             --pwa-strategy=none \
             --dart-define=GEMINI_API_KEY="$GEMINI_API_KEY" \
             --dart-define=GEMINI_MODEL=gemini-2.5-flash \
-            --dart-define=PAYMONGO_SECRET_KEY="$PAYMONGO_SECRET_KEY"
+            --dart-define=PAYMONGO_ENABLED=true
 
       - name: Install Firebase CLI
         run: npm install -g firebase-tools@15.18.0
 
-      - name: Deploy to Firebase Hosting
+      - name: Install Functions dependencies
+        run: npm install --prefix functions
+
+      - name: Set PayMongo secret in Firebase (if provided as GitHub secret)
+        env:
+          PAYMONGO_SECRET_KEY: ${{ secrets.PAYMONGO_SECRET_KEY }}
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          if [ -n "$PAYMONGO_SECRET_KEY" ]; then
+            echo "$PAYMONGO_SECRET_KEY" | firebase functions:secrets:set PAYMONGO_SECRET_KEY \
+              --project clothnear --non-interactive --token "$FIREBASE_TOKEN" --force
+            echo "PayMongo secret updated in Firebase Secret Manager."
+          else
+            echo "::warning::PAYMONGO_SECRET_KEY not set — skipping secret update."
+          fi
+
+      - name: Deploy Functions to Firebase
+        run: firebase deploy --only functions --project clothnear --non-interactive --token "${{ secrets.FIREBASE_TOKEN }}"
+
+      - name: Deploy Hosting to Firebase
         run: firebase deploy --only hosting --project clothnear --non-interactive --token "${{ secrets.FIREBASE_TOKEN }}"
