@@ -31,7 +31,6 @@ jobs:
             echo "::warning::PAYMONGO_SECRET_KEY is not set. Online payments will be disabled in this build."
           fi
 
-          //PayMongo Secret added
       - name: Create .env for Flutter asset bundle
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
