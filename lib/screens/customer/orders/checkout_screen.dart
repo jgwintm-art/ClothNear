@@ -37,14 +37,21 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   String _paymentChannel = 'gcash'; // 'gcash' | 'paymaya' | 'card'
   bool _isLoading = false;
 
+  /// Live total computed from the actual items list.
+  /// This ensures the price is always accurate regardless of what was passed
+  /// in as [widget.totalAmount], and updates correctly when [setState] is
+  /// called (e.g. after the user changes payment type or order type).
+  double get _computedTotal =>
+      widget.items.fold(0.0, (sum, item) => sum + item.totalPrice);
+
   double get _amountToPay {
-    if (_paymentType == 'full') return widget.totalAmount;
-    return widget.totalAmount / 2;
+    if (_paymentType == 'full') return _computedTotal;
+    return _computedTotal / 2;
   }
 
   double get _remainingBalance {
     if (_paymentType == 'full') return 0;
-    return widget.totalAmount - _amountToPay;
+    return _computedTotal - _amountToPay;
   }
 
   String get _initialStatus {
@@ -71,10 +78,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         storeId: storeId,
         storeName: store?.storeName ?? '',
         items: _buildOrderItems(),
-        totalPrice: widget.totalAmount,
+        totalPrice: _computedTotal,
         amountPaid: _paymentType == 'full' ? 0.0 : 0.0,
         // In-person: amountPaid stays 0 until worker confirms at pickup
-        remainingBalance: widget.totalAmount,
+        remainingBalance: _computedTotal,
         paymentType: _paymentType,
         orderType: _orderType,
         status: _initialStatus,
@@ -142,9 +149,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         storeId: storeId,
         storeName: store?.storeName ?? '',
         items: _buildOrderItems(),
-        totalPrice: widget.totalAmount,
+        totalPrice: _computedTotal,
         amountPaid: 0.0, // confirmed after PayMongo webhook/poll
-        remainingBalance: widget.totalAmount,
+        remainingBalance: _computedTotal,
         paymentType: _paymentType,
         orderType: _orderType,
         status: 'payment_pending',
@@ -175,7 +182,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             orderId: orderId,
             paymongoLinkId: link.linkId,
             amountPaid: _amountToPay,
-            totalAmount: widget.totalAmount,
+            totalAmount: _computedTotal,
             paymentType: _paymentType,
             paymentChannel: _paymentChannel,
           ),
@@ -314,7 +321,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   child: _buildPaymentAmountCard(
                     'full',
                     'Full Payment',
-                    '₱${widget.totalAmount.toStringAsFixed(0)}',
+                    '₱${_computedTotal.toStringAsFixed(0)}',
                     'Pay everything now',
                   ),
                 ),
@@ -486,7 +493,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   const Divider(height: 16),
                   _buildTotalRow(
                     'Total',
-                    '₱${widget.totalAmount.toStringAsFixed(2)}',
+                    '₱${_computedTotal.toStringAsFixed(2)}',
                     isBold: true,
                   ),
                   if (_paymentType == 'half') ...[

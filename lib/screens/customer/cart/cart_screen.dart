@@ -4,8 +4,34 @@ import '../../../models/cart_model.dart';
 import '../../../services/cart_service.dart';
 import '../orders/checkout_screen.dart';
 
-class CartScreen extends StatelessWidget {
+class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
+
+  @override
+  State<CartScreen> createState() => _CartScreenState();
+}
+
+class _CartScreenState extends State<CartScreen> {
+  // Tracks which cart item IDs are selected for checkout.
+  // Starts empty; populated when the first stream snapshot arrives.
+  final Set<String> _selectedIds = {};
+
+  // Whether we have initialised the selection set from the first snapshot.
+  bool _selectionInitialised = false;
+
+  /// Initialise all items as selected on first load, then leave user choices
+  /// alone on subsequent stream updates (e.g. quantity changes).
+  void _initialiseSelection(List<CartItemModel> items) {
+    if (!_selectionInitialised) {
+      _selectedIds.addAll(items.map((i) => i.cartItemId));
+      _selectionInitialised = true;
+    } else {
+      // Remove IDs that no longer exist in the cart (item was deleted).
+      _selectedIds.retainWhere(
+        (id) => items.any((i) => i.cartItemId == id),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -62,10 +88,24 @@ class CartScreen extends StatelessWidget {
           }
 
           final items = snapshot.data!;
+
+          // Keep selection set in sync with current cart items.
+          _initialiseSelection(items);
+
+          final selectedItems =
+              items.where((i) => _selectedIds.contains(i.cartItemId)).toList();
+
           final subtotal = items.fold<double>(
             0,
             (sum, item) => sum + item.totalPrice,
           );
+
+          final selectedSubtotal = selectedItems.fold<double>(
+            0,
+            (sum, item) => sum + item.totalPrice,
+          );
+
+          final allSelected = _selectedIds.length == items.length;
 
           return Column(
             children: [
@@ -73,12 +113,66 @@ class CartScreen extends StatelessWidget {
                 child: ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
+                    // ── Select-all row ──────────────────────────────────────
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Row(
+                        children: [
+                          Checkbox(
+                            value: allSelected,
+                            activeColor: Colors.blue[700],
+                            onChanged: (checked) {
+                              setState(() {
+                                if (checked == true) {
+                                  _selectedIds.addAll(
+                                    items.map((i) => i.cartItemId),
+                                  );
+                                } else {
+                                  _selectedIds.clear();
+                                }
+                              });
+                            },
+                          ),
+                          Text(
+                            allSelected ? 'Deselect All' : 'Select All',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '${_selectedIds.length}/${items.length} selected',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
                     ...items.map(
-                      (item) => _buildCartItem(context, uid, cartService, item),
+                      (item) => _buildCartItem(
+                        context,
+                        uid,
+                        cartService,
+                        item,
+                        isSelected: _selectedIds.contains(item.cartItemId),
+                        onToggle: (selected) {
+                          setState(() {
+                            if (selected) {
+                              _selectedIds.add(item.cartItemId);
+                            } else {
+                              _selectedIds.remove(item.cartItemId);
+                            }
+                          });
+                        },
+                      ),
                     ),
                     const SizedBox(height: 16),
 
-                    // Order summary
+                    // ── Order summary ───────────────────────────────────────
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -92,7 +186,7 @@ class CartScreen extends StatelessWidget {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                'Subtotal (${items.length} item${items.length > 1 ? 's' : ''})',
+                                'Cart Total (${items.length} item${items.length > 1 ? 's' : ''})',
                                 style: TextStyle(
                                   color: Colors.grey[600],
                                   fontSize: 13,
@@ -104,19 +198,41 @@ class CartScreen extends StatelessWidget {
                               ),
                             ],
                           ),
+                          if (_selectedIds.length != items.length) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Selected (${_selectedIds.length} item${_selectedIds.length != 1 ? 's' : ''})',
+                                  style: TextStyle(
+                                    color: Colors.blue[700],
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                Text(
+                                  '₱${selectedSubtotal.toStringAsFixed(2)}',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.blue[700],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                           const Divider(height: 16),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               const Text(
-                                'Total',
+                                'Checkout Total',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
                               Text(
-                                '₱${subtotal.toStringAsFixed(2)}',
+                                '₱${selectedSubtotal.toStringAsFixed(2)}',
                                 style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
@@ -132,7 +248,7 @@ class CartScreen extends StatelessWidget {
                 ),
               ),
 
-              // Checkout button
+              // ── Checkout button ─────────────────────────────────────────
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -143,25 +259,34 @@ class CartScreen extends StatelessWidget {
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton(
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            CheckoutScreen(items: items, totalAmount: subtotal),
-                      ),
-                    ),
+                    onPressed: _selectedIds.isEmpty
+                        ? null // disabled — nothing selected
+                        : () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => CheckoutScreen(
+                                items: selectedItems,
+                                totalAmount: selectedSubtotal,
+                              ),
+                            ),
+                          ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blue[700],
+                      disabledBackgroundColor: Colors.grey[300],
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: const Text(
-                      'Proceed to Checkout',
+                    child: Text(
+                      _selectedIds.isEmpty
+                          ? 'Select items to checkout'
+                          : 'Proceed to Checkout (${_selectedIds.length})',
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: _selectedIds.isEmpty
+                            ? Colors.grey[500]
+                            : Colors.white,
                       ),
                     ),
                   ),
@@ -178,20 +303,31 @@ class CartScreen extends StatelessWidget {
     BuildContext context,
     String uid,
     CartService cartService,
-    CartItemModel item,
-  ) {
+    CartItemModel item, {
+    required bool isSelected,
+    required ValueChanged<bool> onToggle,
+  }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(
+          color: isSelected ? Colors.blue.shade300 : Colors.grey.shade200,
+          width: isSelected ? 1.5 : 1,
+        ),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Product image or placeholder
+          // ── Checkbox ──────────────────────────────────────────────────────
+          Checkbox(
+            value: isSelected,
+            activeColor: Colors.blue[700],
+            onChanged: (checked) => onToggle(checked ?? false),
+          ),
+
+          // ── Product image ─────────────────────────────────────────────────
           Container(
             width: 64,
             height: 64,
@@ -216,134 +352,142 @@ class CartScreen extends StatelessWidget {
           ),
           const SizedBox(width: 12),
 
-          // Item details
+          // ── Item details ──────────────────────────────────────────────────
           Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.productName,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${item.color} • ${item.size}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '₱${item.price.toStringAsFixed(0)} each',
+                    style: TextStyle(fontSize: 12, color: Colors.blue[700]),
+                  ),
+                  const SizedBox(height: 4),
+                  // Design badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color:
+                          item.isPlain ? Colors.grey[100] : Colors.purple[50],
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: item.isPlain
+                            ? Colors.grey.shade300
+                            : Colors.purple.shade200,
+                      ),
+                    ),
+                    child: Text(
+                      item.isPlain ? 'Plain' : 'Custom Design',
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: item.isPlain
+                            ? Colors.grey[600]
+                            : Colors.purple[700],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // ── Quantity + price + remove ─────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
+                GestureDetector(
+                  onTap: () =>
+                      cartService.removeFromCart(uid, item.cartItemId),
+                  child: const Icon(Icons.close, size: 16, color: Colors.red),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade300),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () => cartService.updateQuantity(
+                          uid,
+                          item.cartItemId,
+                          item.quantity - 1,
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          child: Text(
+                            '−',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.blue[700],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Text(
+                        '${item.quantity}',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => cartService.updateQuantity(
+                          uid,
+                          item.cartItemId,
+                          item.quantity + 1,
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          child: Text(
+                            '+',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.blue[700],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
                 Text(
-                  item.productName,
+                  '₱${item.totalPrice.toStringAsFixed(0)}',
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  '${item.color} • ${item.size}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '₱${item.price.toStringAsFixed(0)} each',
-                  style: TextStyle(fontSize: 12, color: Colors.blue[700]),
-                ),
-                const SizedBox(height: 4),
-                // Design badge
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: item.isPlain ? Colors.grey[100] : Colors.purple[50],
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(
-                      color: item.isPlain
-                          ? Colors.grey.shade300
-                          : Colors.purple.shade200,
-                    ),
-                  ),
-                  child: Text(
-                    item.isPlain ? 'Plain' : 'Custom Design',
-                    style: TextStyle(
-                      fontSize: 9,
-                      color: item.isPlain
-                          ? Colors.grey[600]
-                          : Colors.purple[700],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
               ],
             ),
-          ),
-
-          // Quantity + price + remove
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              GestureDetector(
-                onTap: () => cartService.removeFromCart(uid, item.cartItemId),
-                child: const Icon(Icons.close, size: 16, color: Colors.red),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade300),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () => cartService.updateQuantity(
-                        uid,
-                        item.cartItemId,
-                        item.quantity - 1,
-                      ),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        child: Text(
-                          '−',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.blue[700],
-                          ),
-                        ),
-                      ),
-                    ),
-                    Text(
-                      '${item.quantity}',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: () => cartService.updateQuantity(
-                        uid,
-                        item.cartItemId,
-                        item.quantity + 1,
-                      ),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        child: Text(
-                          '+',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.blue[700],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '₱${item.totalPrice.toStringAsFixed(0)}',
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
           ),
         ],
       ),
