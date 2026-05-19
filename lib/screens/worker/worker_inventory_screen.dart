@@ -270,7 +270,7 @@ class _WorkerInventoryScreenState extends State<WorkerInventoryScreen> {
                       child: Image.network(
                         product.imageUrl,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => Icon(
+                        errorBuilder: (context, error, stack) => Icon(
                           Icons.checkroom_outlined,
                           color: Colors.orange[300],
                         ),

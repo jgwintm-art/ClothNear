@@ -317,7 +317,7 @@ class _ProductPricingCardState extends State<_ProductPricingCard> {
                             child: Image.network(
                               widget.product.imageUrl,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, _, _) => Icon(
+                              errorBuilder: (context, error, stack) => Icon(
                                 Icons.checkroom_outlined,
                                 color: Colors.purple[300],
                               ),

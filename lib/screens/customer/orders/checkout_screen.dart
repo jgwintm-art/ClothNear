@@ -432,7 +432,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                     child: Image.network(
                                       item.productImageUrl,
                                       fit: BoxFit.cover,
-                                      errorBuilder: (_, _, _) => const Center(
+                                      errorBuilder: (context, error, stack) => const Center(
                                         child: Text(
                                           '👕',
                                           style: TextStyle(fontSize: 18),
