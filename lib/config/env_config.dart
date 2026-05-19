@@ -39,24 +39,15 @@ class EnvConfig {
 
   // ── PayMongo ─────────────────────────────────────────────────────────────────
   //
-  // ARCHITECTURE CHANGE (CORS fix):
-  //   PayMongo API calls now go through a Firebase Cloud Function proxy.
-  //   The secret key is stored in Firebase Secret Manager (server-side only)
-  //   and is NEVER embedded in the Flutter web bundle.
+  // PayMongo API calls are proxied through a Cloudflare Worker to bypass
+  // browser CORS restrictions on Flutter Web.
   //
-  //   The Flutter app only needs to know:
-  //     1. Whether PayMongo is enabled (isPayMongoConfigured)
-  //     2. The base URL of the Firebase Functions (paymongoFunctionsBase)
+  // The Flutter app only needs:
+  //   1. PAYMONGO_ENABLED=true  — shows the online payment option
+  //   2. PAYMONGO_FUNCTIONS_BASE — the Cloudflare Worker URL
   //
-  //   isPayMongoConfigured is controlled by PAYMONGO_ENABLED in .env / CI.
-  //   Set it to "true" when the secret key has been added to Firebase.
-  //
-  //   To set the secret key server-side (run once):
-  //     firebase functions:secrets:set PAYMONGO_SECRET_KEY
-  //
-  //   For local development with the Functions emulator:
-  //     Add to .env:  PAYMONGO_FUNCTIONS_BASE=http://localhost:5001/clothnear/us-central1
-  //     Then run:     firebase emulators:start --only functions
+  // The secret key lives inside the Cloudflare Worker (server-side only)
+  // and is never embedded in the Flutter bundle.
 
   /// Whether online payment via PayMongo is enabled in this build.
   /// Controlled by PAYMONGO_ENABLED=true in .env or CI secrets.

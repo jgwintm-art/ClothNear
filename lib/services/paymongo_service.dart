@@ -29,8 +29,8 @@ class PayMongoService {
     // Allow override from env (useful for non-default regions)
     final override = EnvConfig.paymongoFunctionsBase;
     if (override.isNotEmpty) return override;
-    // Default: Firebase Functions for project clothnear (us-central1)
-    return 'https://us-central1-clothnear.cloudfunctions.net';
+    // Default: Cloudflare Worker proxy for PayMongo
+    return 'https://clothnear-paymongo.jg-wintm.workers.dev';
   }
 
   static bool get isConfigured => EnvConfig.isPayMongoConfigured;

@@ -196,7 +196,7 @@ class _WorkerInventoryScreenState extends State<WorkerInventoryScreen> {
                       child: ListView.separated(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         itemCount: products.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        separatorBuilder: (_, _) => const SizedBox(height: 10),
                         itemBuilder: (context, index) =>
                             _buildProductCard(products[index]),
                       ),
@@ -270,7 +270,7 @@ class _WorkerInventoryScreenState extends State<WorkerInventoryScreen> {
                       child: Image.network(
                         product.imageUrl,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Icon(
+                        errorBuilder: (_, _, _) => Icon(
                           Icons.checkroom_outlined,
                           color: Colors.orange[300],
                         ),

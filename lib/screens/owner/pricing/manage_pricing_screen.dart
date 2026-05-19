@@ -96,8 +96,7 @@ class _ManagePricingScreenState extends State<ManagePricingScreen> {
                 return ListView.separated(
                   padding: const EdgeInsets.all(16),
                   itemCount: products.length,
-                  // FIX: use __ for second unused parameter (avoids linter warning)
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  separatorBuilder: (_, _) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     return _ProductPricingCard(
                       product: products[index],
@@ -318,8 +317,7 @@ class _ProductPricingCardState extends State<_ProductPricingCard> {
                             child: Image.network(
                               widget.product.imageUrl,
                               fit: BoxFit.cover,
-                              // FIX: use __ for second unused parameter
-                              errorBuilder: (_, __, ___) => Icon(
+                              errorBuilder: (_, _, _) => Icon(
                                 Icons.checkroom_outlined,
                                 color: Colors.purple[300],
                               ),
