@@ -176,6 +176,7 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
       );
     }
 
+    // Process Sales — requires canProcessSales
     if (permissions['canProcessSales'] == true) {
       menuItems.add(
         _WorkerMenuItem(
