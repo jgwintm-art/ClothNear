@@ -9,9 +9,10 @@ import '../../../services/cloudinary_service.dart';
 class AddEditItemScreen extends StatefulWidget {
   final ProductModel? product;
 
-  /// When [viewOnly] is true the screen renders in read-only mode:
+  /// When true, the screen renders in read-only mode for workers:
   /// all inputs are disabled, edit/delete controls are hidden, and
-  /// the save button is not shown.  Used by worker accounts.
+  /// the save button is not shown. Defaults to false so all existing
+  /// owner call-sites require no changes.
   final bool viewOnly;
 
   const AddEditItemScreen({super.key, this.product, this.viewOnly = false});
@@ -34,7 +35,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
   final Map<String, TextEditingController> _variantPriceControllers = {};
   final Map<String, TextEditingController> _variantStockControllers = {};
 
-  // ✅ NEW: product image and customizable flag
+  // product image and customizable flag
   String _productImageUrl = '';
   bool _isCustomizable = false;
 
@@ -121,37 +122,58 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
   }
 
   Future<void> _uploadProductImage() async {
+    // Set the uploading flag BEFORE opening the file picker so the tap
+    // guard on the GestureDetector is active for the entire pick + upload
+    // lifecycle — prevents a second concurrent upload from starting.
+    setState(() => _isUploadingImage = true);
+
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.image,
         withData: true,
       );
 
-      if (result == null) return;
-      setState(() => _isUploadingImage = true);
+      if (result == null) {
+        // User cancelled the picker — reset the flag and exit cleanly.
+        if (mounted) setState(() => _isUploadingImage = false);
+        return;
+      }
 
       final file = result.files.single;
+
+      // Sanitize the filename: on Windows, file_picker sometimes returns
+      // the full absolute path (e.g. C:\Users\...\photo.jpg) as file.name.
+      // Passing a full path as the Cloudinary filename corrupts the
+      // public_id and causes the upload to be saved under a broken key.
+      final fileName = file.name.replaceAll('\\', '/').split('/').last;
+
       String url;
 
       if (file.bytes != null && file.bytes!.isNotEmpty) {
-        url = await CloudinaryService.uploadBytes(file.bytes!, file.name);
+        // Web and any platform where file_picker provides in-memory bytes.
+        url = await CloudinaryService.uploadBytes(file.bytes!, fileName);
       } else if (file.path != null && file.path!.isNotEmpty) {
+        // Mobile/desktop: read from the file system path.
         url = await CloudinaryService.uploadFile(file.path!);
       } else {
         throw Exception('Could not read file — please try again');
       }
 
+      // Guard setState: the widget may have been disposed while the
+      // Cloudinary request was in-flight (e.g. user navigated away).
+      // Without this guard, calling setState on a disposed widget throws
+      // a framework error and the URL is silently lost.
+      if (!mounted) return;
       setState(() {
         _productImageUrl = url;
         _isUploadingImage = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isUploadingImage = false);
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Image upload failed: $e')));
-      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Image upload failed: $e')));
     }
   }
 
@@ -250,7 +272,6 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        // Workers: show a VIEW-ONLY badge instead of edit affordances
         actions: _viewOnly
             ? [
                 Container(
@@ -511,7 +532,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                     children: _availableSizes.map((size) {
                       final isSelected = _selectedSizes.contains(size);
                       return GestureDetector(
-                        onTap: _viewOnly ? null : () => _toggleSize(size),
+                        onTap: () => _toggleSize(size),
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 16,
@@ -560,7 +581,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                       final color = colorMap['color'] as Color;
                       final isSelected = _selectedColors.contains(colorName);
                       return GestureDetector(
-                        onTap: _viewOnly ? null : () => _toggleColor(colorName),
+                        onTap: () => _toggleColor(colorName),
                         child: Column(
                           children: [
                             Container(
@@ -692,14 +713,9 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                                     child: TextField(
                                       controller: _variantPriceControllers[key],
                                       keyboardType: TextInputType.number,
-                                      readOnly: _viewOnly,
                                       decoration: InputDecoration(
                                         labelText: 'Price ₱',
                                         isDense: true,
-                                        filled: _viewOnly,
-                                        fillColor: _viewOnly
-                                            ? Colors.grey[100]
-                                            : null,
                                         contentPadding:
                                             const EdgeInsets.symmetric(
                                               horizontal: 10,
@@ -715,9 +731,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                                             8,
                                           ),
                                           borderSide: BorderSide(
-                                            color: _viewOnly
-                                                ? Colors.grey.shade300
-                                                : Colors.blue[700]!,
+                                            color: Colors.blue[700]!,
                                           ),
                                         ),
                                       ),
@@ -728,14 +742,9 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                                     child: TextField(
                                       controller: _variantStockControllers[key],
                                       keyboardType: TextInputType.number,
-                                      readOnly: _viewOnly,
                                       decoration: InputDecoration(
                                         labelText: 'Stock',
                                         isDense: true,
-                                        filled: _viewOnly,
-                                        fillColor: _viewOnly
-                                            ? Colors.grey[100]
-                                            : null,
                                         contentPadding:
                                             const EdgeInsets.symmetric(
                                               horizontal: 10,
@@ -751,9 +760,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                                             8,
                                           ),
                                           borderSide: BorderSide(
-                                            color: _viewOnly
-                                                ? Colors.grey.shade300
-                                                : Colors.blue[700]!,
+                                            color: Colors.blue[700]!,
                                           ),
                                         ),
                                       ),
@@ -772,31 +779,30 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
               ),
             const SizedBox(height: 24),
 
-            // Save Button — hidden for workers (viewOnly)
-            if (!_viewOnly)
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _saveProduct,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue[700],
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+            // Save Button
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : _saveProduct,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue[700],
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: _isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : Text(
-                          _isEditing ? 'Update Item' : 'Save Item',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
                 ),
+                child: _isLoading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : Text(
+                        _isEditing ? 'Update Item' : 'Save Item',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
               ),
+            ),
             const SizedBox(height: 24),
           ],
         ),
@@ -862,7 +868,6 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
     required IconData icon,
     TextInputType keyboardType = TextInputType.text,
   }) {
-    final isReadOnly = _viewOnly;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -878,20 +883,14 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
         TextField(
           controller: controller,
           keyboardType: keyboardType,
-          readOnly: isReadOnly,
-          style: TextStyle(color: isReadOnly ? Colors.grey[700] : null),
           decoration: InputDecoration(
             hintText: hint,
             prefixIcon: Icon(icon, size: 20),
             isDense: true,
-            filled: isReadOnly,
-            fillColor: isReadOnly ? Colors.grey[100] : null,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(
-                color: isReadOnly ? Colors.grey.shade300 : Colors.blue[700]!,
-              ),
+              borderSide: BorderSide(color: Colors.blue[700]!),
             ),
           ),
         ),
