@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/user_model.dart';
+import '../models/worker_model.dart';
 import '../models/store_model.dart';
 import '../services/auth_service.dart';
 import 'worker/worker_orders_screen.dart';
@@ -20,7 +20,7 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
   final _authService = AuthService();
   final _firestore = FirebaseFirestore.instance;
 
-  UserModel? _worker;
+  WorkerModel? _worker;
   StoreModel? _store;
   bool _isLoading = true;
   String? _error;
@@ -39,7 +39,54 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
       final userDoc = await _firestore.collection('users').doc(uid).get();
       if (!userDoc.exists) throw Exception('Worker account not found.');
 
-      final worker = UserModel.fromMap(userDoc.data()!);
+      final data = userDoc.data()!;
+
+      // Lazy migration: backfill any permission keys that did not exist when
+      // this worker account was originally created (e.g. canUsePOS for
+      // accounts created before the POS feature was added).
+      // WorkerModel._migratePermissions() defines the canonical key set.
+      // We compare against the raw Firestore map and write only missing keys
+      // so we never overwrite values the owner has already set.
+      final rawPerms = Map<String, dynamic>.from(data['permissions'] ?? {});
+      const knownDefaults = {
+        'canUpdateOrderStatus': false,
+        'canConfirmPayments': false,
+        'canViewInventory': false,
+        'canUsePOS': false,
+      };
+      final missingKeys = knownDefaults.keys
+          .where((k) => !rawPerms.containsKey(k))
+          .toList();
+      if (missingKeys.isNotEmpty) {
+        final batch = _firestore.batch();
+        final missingUpdate = {
+          for (final k in missingKeys) 'permissions.$k': false,
+        };
+        // Backfill /users/{uid}
+        batch.update(_firestore.collection('users').doc(uid), missingUpdate);
+        // Backfill /stores/{storeId}/workers/{uid} if storeId is known
+        final storeId = data['storeId'] as String?;
+        if (storeId != null && storeId.isNotEmpty) {
+          batch.update(
+            _firestore
+                .collection('stores')
+                .doc(storeId)
+                .collection('workers')
+                .doc(uid),
+            missingUpdate,
+          );
+        }
+        await batch.commit();
+        // Merge the defaults into the local data map so the model below
+        // picks up the backfilled values without needing a second Firestore read.
+        for (final k in missingKeys) {
+          (data['permissions'] as Map)[k] = false;
+        }
+      }
+
+      // Deserialize as WorkerModel — all typed getters (canUsePOS, etc.)
+      // and _migratePermissions are now in scope.
+      final worker = WorkerModel.fromMap(data, uid);
 
       if (!worker.isActive) {
         await _authService.logout();
@@ -48,7 +95,7 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
         return;
       }
 
-      if (worker.storeId == null) {
+      if (worker.storeId.isEmpty) {
         throw Exception('Worker is not assigned to any store.');
       }
 
@@ -114,12 +161,11 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
 
     final worker = _worker!;
     final store = _store!;
-    final permissions = worker.permissions;
 
     final menuItems = <_WorkerMenuItem>[];
 
     // View Orders — requires canUpdateOrderStatus
-    if (permissions['canUpdateOrderStatus'] == true) {
+    if (worker.canUpdateOrderStatus) {
       menuItems.add(
         _WorkerMenuItem(
           icon: Icons.receipt_long_outlined,
@@ -131,7 +177,7 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
               builder: (_) => WorkerOrdersScreen(
                 storeId: store.storeId,
                 canUpdateStatus: true,
-                canConfirmPayments: permissions['canConfirmPayments'] == true,
+                canConfirmPayments: worker.canConfirmPayments,
               ),
             ),
           ),
@@ -140,7 +186,7 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
     }
 
     // Manage Payments — requires canConfirmPayments
-    if (permissions['canConfirmPayments'] == true) {
+    if (worker.canConfirmPayments) {
       menuItems.add(
         _WorkerMenuItem(
           icon: Icons.payments_outlined,
@@ -160,7 +206,7 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
     }
 
     // View Inventory — requires canViewInventory
-    if (permissions['canViewInventory'] == true) {
+    if (worker.canViewInventory) {
       menuItems.add(
         _WorkerMenuItem(
           icon: Icons.inventory_2_outlined,
@@ -177,7 +223,7 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
     }
 
     // Point of Sale — requires canUsePOS
-    if (permissions['canUsePOS'] == true) {
+    if (worker.canUsePOS) {
       menuItems.add(
         _WorkerMenuItem(
           icon: Icons.point_of_sale_outlined,

@@ -27,8 +27,31 @@ class WorkerModel {
   bool get canConfirmPayments => permissions['canConfirmPayments'] ?? false;
   bool get canViewInventory => permissions['canViewInventory'] ?? false;
   bool get canUsePOS => permissions['canUsePOS'] ?? false;
-  bool get canProcessSales => permissions['canUsePOS'] ?? false;
+  // canProcessSales removed — canonical name is canUsePOS everywhere.
   int get activePermissionCount => permissions.values.where((v) => v).length;
+
+  /// Ensures legacy permission documents that pre-date a given permission key
+  /// are backfilled with a safe [false] default rather than omitting the key
+  /// entirely. Called from [fromMap] on every deserialization.
+  ///
+  /// Adding a new permission in the future: add its key with a [false] default
+  /// to [_knownPermissions] — legacy documents will be handled automatically.
+  static const Map<String, bool> _knownPermissions = {
+    'canUpdateOrderStatus': false,
+    'canConfirmPayments': false,
+    'canViewInventory': false,
+    'canUsePOS': false,
+  };
+
+  static Map<String, bool> _migratePermissions(Map<String, dynamic> raw) {
+    // Start with all known keys defaulted to false.
+    final result = Map<String, bool>.from(_knownPermissions);
+    // Overwrite with whatever is actually stored in Firestore.
+    raw.forEach((key, value) {
+      if (value is bool) result[key] = value;
+    });
+    return result;
+  }
 
   factory WorkerModel.fromMap(Map<String, dynamic> map, String id) {
     DateTime parsedDate;
@@ -51,11 +74,12 @@ class WorkerModel {
       isActive: map['isActive'] ?? true,
       firstLogin: map['firstLogin'] ?? true,
       permissions: map['permissions'] != null
-          ? Map<String, bool>.from(map['permissions'])
+          ? _migratePermissions(Map<String, dynamic>.from(map['permissions']))
           : {
               'canUpdateOrderStatus': false,
               'canConfirmPayments': false,
               'canViewInventory': false,
+              'canUsePOS': false,
             },
       createdAt: parsedDate,
       createdBy: map['createdBy'] ?? '',
