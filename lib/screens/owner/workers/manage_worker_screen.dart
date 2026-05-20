@@ -217,7 +217,7 @@ class _WorkerCard extends StatelessWidget {
     if (worker.canUpdateOrderStatus) permissionLabels.add('Orders');
     if (worker.canConfirmPayments) permissionLabels.add('Payments');
     if (worker.canViewInventory) permissionLabels.add('Inventory');
-    if (worker.canUsePOS) permissionLabels.add('POS Sales');
+    if (worker.canProcessSales) permissionLabels.add('POS Sales');
 
     return Card(
       elevation: 0,

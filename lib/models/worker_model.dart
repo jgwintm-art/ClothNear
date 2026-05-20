@@ -27,6 +27,7 @@ class WorkerModel {
   bool get canConfirmPayments => permissions['canConfirmPayments'] ?? false;
   bool get canViewInventory => permissions['canViewInventory'] ?? false;
   bool get canUsePOS => permissions['canUsePOS'] ?? false;
+  bool get canProcessSales => permissions['canUsePOS'] ?? false;
   int get activePermissionCount => permissions.values.where((v) => v).length;
 
   factory WorkerModel.fromMap(Map<String, dynamic> map, String id) {
