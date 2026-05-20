@@ -283,6 +283,8 @@ class OrderModel {
           return 'Cash';
         case 'partial_cash':
           return 'Cash (Partial)';
+        default: // Handle unexpected string values
+          return paymentMethod!; // Explicitly assert non-null
       }
     }
     if (isOnlinePayment) return paymentChannelDisplay;
@@ -320,7 +322,7 @@ class OrderModel {
       : null;
 
   String get paymentChannelDisplay {
-    switch (paymentChannel) {
+    switch (paymentChannel ?? '') { // Handle null paymentChannel
       case 'gcash':
         return 'GCash';
       case 'paymaya':
