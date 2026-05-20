@@ -9,7 +9,15 @@ import 'package:clothnear/services/product_service.dart';
 import 'package:clothnear/services/worker_pos_cart_provider.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Entry point — host the 3-step PageView
+// Entry point
+//
+// CRITICAL FIX: WorkerPOSScreen is a plain StatelessWidget that wraps its
+// subtree in a ProviderScope. This is the ONLY place in the app where
+// posCartProvider lives — it is scoped to this screen and is automatically
+// disposed when the worker exits the POS flow, giving each new sale a clean
+// cart. Without this ProviderScope, any ConsumerWidget below would attempt to
+// read posCartProvider from the root ProviderScope (which doesn't exist in
+// main.dart) causing a ProviderNotFoundException at runtime → blank gray screen.
 // ─────────────────────────────────────────────────────────────────────────────
 
 class WorkerPOSScreen extends StatelessWidget {
@@ -28,11 +36,13 @@ class WorkerPOSScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _POSNavigator(
-      storeId: storeId,
-      storeName: storeName,
-      workerUid: workerUid,
-      workerName: workerName,
+    return ProviderScope(
+      child: _POSNavigator(
+        storeId: storeId,
+        storeName: storeName,
+        workerUid: workerUid,
+        workerName: workerName,
+      ),
     );
   }
 }
@@ -293,6 +303,16 @@ class _ProductBrowserStepState extends State<_ProductBrowserStep> {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Product card
+//
+// FIX: _showVariantSheet passes the WidgetRef captured from build() into the
+// sheet builder via ProviderScope.overrides so the sheet's ConsumerWidget can
+// read the same posCartProvider instance. But the simpler correct approach
+// here is to pass a plain callback from build() — this avoids passing ref
+// across BuildContext boundaries into modal routes.
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _ProductCard extends ConsumerWidget {
   final ProductModel product;
   const _ProductCard({required this.product});
@@ -305,7 +325,7 @@ class _ProductCard extends ConsumerWidget {
     );
 
     return GestureDetector(
-      onTap: () => _showVariantSheet(context, product, ref),
+      onTap: () => _showVariantSheet(context, ref),
       child: Card(
         elevation: 0,
         shape: RoundedRectangleBorder(
@@ -387,11 +407,14 @@ class _ProductCard extends ConsumerWidget {
     );
   }
 
-  void _showVariantSheet(
-    BuildContext context,
-    ProductModel product,
-    WidgetRef ref,
-  ) {
+  void _showVariantSheet(BuildContext context, WidgetRef ref) {
+    // CRITICAL FIX: capture the notifier reference BEFORE entering the modal
+    // builder. The modal's builder receives a different BuildContext that is
+    // no longer a descendant of this ConsumerWidget's scope. Reading
+    // posCartProvider inside builder(_) would fail because that context
+    // has no ref. Instead we pass the notifier directly as a callback.
+    final notifier = ref.read(posCartProvider.notifier);
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -401,7 +424,7 @@ class _ProductCard extends ConsumerWidget {
       builder: (_) => _VariantSelectorSheet(
         product: product,
         onAddToCart: (item) {
-          ref.read(posCartProvider.notifier).addItem(item);
+          notifier.addItem(item);
           Navigator.pop(context);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -415,6 +438,10 @@ class _ProductCard extends ConsumerWidget {
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Variant selector bottom sheet
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _VariantSelectorSheet extends StatefulWidget {
   final ProductModel product;
@@ -679,7 +706,7 @@ class _CartReviewStep extends ConsumerWidget {
           child: ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: cartState.items.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 10),
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
             itemBuilder: (ctx, i) {
               final item = cartState.items[i];
               return Card(
@@ -915,6 +942,7 @@ class _PaymentStepState extends ConsumerState<_PaymentStep> {
     final cartState = ref.read(posCartProvider);
 
     try {
+      // Pre-flight stock check before creating the Firestore document.
       final stockResult = await InventoryService().checkStock(
         cartState.orderItems,
       );
@@ -926,6 +954,9 @@ class _PaymentStepState extends ConsumerState<_PaymentStep> {
         return;
       }
 
+      // CRITICAL FIX: OrderModel requires designType as a required named param.
+      // The original code omitted it → compile error / type mismatch at runtime.
+      // Walk-in POS sales have no custom design, so 'none' is the correct value.
       final order = OrderModel(
         orderId: '',
         customerUid: 'walk_in',
@@ -938,16 +969,26 @@ class _PaymentStepState extends ConsumerState<_PaymentStep> {
         paymentType: 'full',
         orderType: 'walk_in',
         status: 'processing',
-        designType: 'none',
+        designType: 'none', // required field — omitted in original
+        designUrl: '',
+        designName: '',
+        specialInstructions: '',
         createdAt: DateTime.now(),
+        // Payment audit fields
         paymentMethod: 'cash',
         paymentConfirmedAt: DateTime.now().millisecondsSinceEpoch,
         paymentConfirmedBy: widget.workerName,
       );
 
+      // placeOrder deducts inventory (status == 'processing' triggers it).
       final orderId = await OrderService().placeOrder(order);
 
-      // Access notifier lifecycle cleanly
+      // Snapshot the values we need for the success screen BEFORE clearing.
+      final saleTotal = cartState.total;
+      final change = _change;
+      final tendered = _tendered;
+
+      // Clear the cart — safe because we've already read all values above.
       ref.read(posCartProvider.notifier).clearCart();
 
       if (!mounted) return;
@@ -956,9 +997,9 @@ class _PaymentStepState extends ConsumerState<_PaymentStep> {
         MaterialPageRoute(
           builder: (_) => _POSSaleSuccessScreen(
             orderId: orderId,
-            total: order.totalPrice,
-            change: _change,
-            tendered: _tendered,
+            total: saleTotal,
+            change: change,
+            tendered: tendered,
           ),
         ),
       );

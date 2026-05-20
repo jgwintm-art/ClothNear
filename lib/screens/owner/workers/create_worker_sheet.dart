@@ -30,6 +30,7 @@ class _CreateWorkerSheetState extends State<CreateWorkerSheet> {
     'canUpdateOrderStatus': false,
     'canConfirmPayments': false,
     'canViewInventory': false,
+    'canUsePOS': false,
   };
 
   @override
@@ -249,6 +250,12 @@ class _CreateWorkerSheetState extends State<CreateWorkerSheet> {
                 subtitle: 'Can view product stock and availability',
                 key: 'canViewInventory',
                 icon: Icons.inventory_2_outlined,
+              ),
+              _buildPermissionTile(
+                label: 'Point of Sale',
+                subtitle: 'Can process walk-in sales and record cash payments',
+                key: 'canUsePOS',
+                icon: Icons.point_of_sale_outlined,
               ),
 
               const SizedBox(height: 24),
