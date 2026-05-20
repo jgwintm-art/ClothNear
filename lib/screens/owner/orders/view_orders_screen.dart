@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../models/order_model.dart';
 import '../../../services/order_service.dart';
 import '../../../services/store_service.dart';
+import '../../../services/inventory_service.dart';
 import 'order_details_screen.dart';
 
 class ViewOrdersScreen extends StatefulWidget {
@@ -432,22 +433,88 @@ class _ViewOrdersScreenState extends State<ViewOrdersScreen> {
   }
 
   Future<void> _approveOrder(OrderModel order) async {
-    await _orderService.updateOrderStatus(order.orderId, 'processing');
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Order approved — now processing!'),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 2),
+    try {
+      await _orderService.approveOrder(order);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Order approved — inventory updated!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } on InsufficientStockException catch (e) {
+      if (!mounted) return;
+      showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Cannot Approve — Insufficient Stock'),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'The following items do not have enough stock:',
+                  style: TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: 10),
+                ...e.errors.map(
+                  (err) => Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.warning_amber_rounded,
+                          size: 16,
+                          color: Colors.orange[700],
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            err.userMessage,
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Please restock the items before approving.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
         ),
       );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to approve: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
   Future<void> _rejectOrder(OrderModel order) async {
     final reason = await _showRejectDialog();
     if (reason == null) return;
-    await _orderService.updateOrderStatus(order.orderId, 'rejected');
+    // rejectOrder restores inventory if it had somehow been deducted.
+    await _orderService.rejectOrder(order);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

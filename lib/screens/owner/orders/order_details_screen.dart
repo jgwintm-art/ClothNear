@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../models/order_model.dart';
 import '../../../services/order_service.dart';
+import '../../../services/inventory_service.dart';
 
 class OrderDetailsScreen extends StatefulWidget {
   final OrderModel order;
@@ -70,35 +71,88 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
   Future<void> _approveOrder() async {
     setState(() => _isLoading = true);
-    await _orderService.updateOrderStatus(_order.orderId, 'processing');
-    setState(() {
-      _order = OrderModel(
-        orderId: _order.orderId,
-        customerUid: _order.customerUid,
-        storeId: _order.storeId,
-        storeName: _order.storeName,
-        items: _order.items,
-        totalPrice: _order.totalPrice,
-        amountPaid: _order.amountPaid,
-        remainingBalance: _order.remainingBalance,
-        paymentType: _order.paymentType,
-        orderType: _order.orderType,
-        status: 'processing',
-        designType: _order.designType,
-        designUrl: _order.designUrl,
-        specialInstructions: _order.specialInstructions,
-        createdAt: _order.createdAt,
-      );
-      _isLoading = false;
-    });
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Order approved!'),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 2),
-        ),
-      );
+    try {
+      // approveOrder deducts inventory atomically, then sets status.
+      await _orderService.approveOrder(_order);
+      setState(() {
+        _order = _order.copyWith(status: 'processing');
+        _isLoading = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Order approved — inventory updated!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } on InsufficientStockException catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        showDialog<void>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('Cannot Approve — Insufficient Stock'),
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'The following items do not have enough stock:',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  const SizedBox(height: 10),
+                  ...e.errors.map(
+                    (err) => Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.warning_amber_rounded,
+                            size: 16,
+                            color: Colors.orange[700],
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              err.userMessage,
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Please restock the items in Manage Inventory before approving.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to approve order: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -141,25 +195,10 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
     if (confirm != true) return;
     setState(() => _isLoading = true);
-    await _orderService.updateOrderStatus(_order.orderId, 'rejected');
+    // rejectOrder also restores inventory if it had been deducted (safety net).
+    await _orderService.rejectOrder(_order);
     setState(() {
-      _order = OrderModel(
-        orderId: _order.orderId,
-        customerUid: _order.customerUid,
-        storeId: _order.storeId,
-        storeName: _order.storeName,
-        items: _order.items,
-        totalPrice: _order.totalPrice,
-        amountPaid: _order.amountPaid,
-        remainingBalance: _order.remainingBalance,
-        paymentType: _order.paymentType,
-        orderType: _order.orderType,
-        status: 'rejected',
-        designType: _order.designType,
-        designUrl: _order.designUrl,
-        specialInstructions: _order.specialInstructions,
-        createdAt: _order.createdAt,
-      );
+      _order = _order.copyWith(status: 'rejected');
       _isLoading = false;
     });
     if (mounted) {
@@ -233,7 +272,8 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
     if (confirm != true) return;
     setState(() => _isLoading = true);
-    await _orderService.cancelOrder(_order.orderId);
+    // cancelOrder restores inventory if it had already been deducted.
+    await _orderService.cancelOrder(_order);
     if (mounted) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(

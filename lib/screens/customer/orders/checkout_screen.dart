@@ -7,6 +7,7 @@ import '../../../services/order_service.dart';
 import '../../../services/cart_service.dart';
 import '../../../services/store_service.dart';
 import '../../../services/paymongo_service.dart';
+import '../../../services/inventory_service.dart';
 import '../../../config/env_config.dart';
 import 'order_status_screen.dart';
 import 'payment_pending_screen.dart';
@@ -29,6 +30,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final _orderService = OrderService();
   final _cartService = CartService();
   final _storeService = StoreService();
+  final _inventoryService = InventoryService();
   final _instructionsController = TextEditingController();
 
   String _orderType = 'normal';
@@ -63,12 +65,80 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     return 'processing';
   }
 
+  // ── Stock pre-check ───────────────────────────────────────────────────────
+
+  /// Validates stock availability before attempting order placement.
+  /// Returns true if stock is sufficient, false (after showing a dialog) if not.
+  Future<bool> _checkStockBeforePlacing() async {
+    final items = _buildOrderItems();
+    final result = await _inventoryService.checkStock(items);
+    if (result.isOk) return true;
+
+    // Show a clear dialog listing all stockout issues.
+    if (!mounted) return false;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Some items are unavailable'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Please update your cart and try again:',
+                style: TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 10),
+              ...result.errors.map(
+                (e) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        size: 16,
+                        color: Colors.orange[700],
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          e.userMessage,
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+    return false;
+  }
+
   // ── In-person order placement (unchanged from existing flow) ─────────────
 
   Future<void> _placeInPersonOrder() async {
     if (widget.items.isEmpty) return;
     setState(() => _isLoading = true);
     try {
+      // Stock pre-check before creating the order document.
+      final stockOk = await _checkStockBeforePlacing();
+      if (!stockOk) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
       final uid = FirebaseAuth.instance.currentUser!.uid;
       final storeId = widget.items.first.storeId;
       final store = await _storeService.getStoreById(storeId);
@@ -110,6 +180,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           backgroundColor: Colors.green,
         ),
       );
+    } on InsufficientStockException catch (e) {
+      if (mounted) {
+        _showErrorDialog('Stock Unavailable', e.userMessage);
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -126,6 +200,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     if (widget.items.isEmpty) return;
     setState(() => _isLoading = true);
     try {
+      // Stock pre-check before creating the PayMongo link.
+      final stockOk = await _checkStockBeforePlacing();
+      if (!stockOk) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
       final uid = FirebaseAuth.instance.currentUser!.uid;
       final storeId = widget.items.first.storeId;
       final store = await _storeService.getStoreById(storeId);
@@ -187,10 +268,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             totalAmount: _computedTotal,
             paymentType: _paymentType,
             paymentChannel: _paymentChannel,
+            orderItems: _buildOrderItems(),
           ),
         ),
         (route) => route.isFirst,
       );
+    } on InsufficientStockException catch (e) {
+      if (mounted) {
+        _showErrorDialog('Stock Unavailable', e.userMessage);
+      }
     } on PayMongoException catch (e) {
       if (mounted) {
         _showErrorDialog('Payment Error', e.message);
@@ -434,12 +520,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                     child: Image.network(
                                       item.productImageUrl,
                                       fit: BoxFit.cover,
-                                      errorBuilder: (context, error, stack) => const Center(
-                                        child: Text(
-                                          '👕',
-                                          style: TextStyle(fontSize: 18),
-                                        ),
-                                      ),
+                                      errorBuilder: (context, error, stack) =>
+                                          const Center(
+                                            child: Text(
+                                              '👕',
+                                              style: TextStyle(fontSize: 18),
+                                            ),
+                                          ),
                                     ),
                                   )
                                 : const Center(

@@ -19,6 +19,7 @@ class PaymentPendingScreen extends StatefulWidget {
   final double totalAmount;
   final String paymentType; // 'full' | 'half'
   final String paymentChannel;
+  final List<Map<String, dynamic>> orderItems; // for inventory deduction
 
   const PaymentPendingScreen({
     super.key,
@@ -28,6 +29,7 @@ class PaymentPendingScreen extends StatefulWidget {
     required this.totalAmount,
     required this.paymentType,
     required this.paymentChannel,
+    required this.orderItems,
   });
 
   @override
@@ -100,6 +102,7 @@ class _PaymentPendingScreenState extends State<PaymentPendingScreen> {
         amountPaid: widget.amountPaid,
         totalPrice: widget.totalAmount,
         paymentChannel: widget.paymentChannel,
+        orderItems: widget.orderItems,
       );
 
       if (!mounted) return;

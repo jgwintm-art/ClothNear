@@ -1,13 +1,38 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/order_model.dart';
+import 'inventory_service.dart';
 
 class OrderService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final InventoryService _inventoryService = InventoryService();
 
-  // Place a new order
+  // ── Order placement ────────────────────────────────────────────────────────
+
+  /// Places a new order.
+  ///
+  /// For orders that go straight to 'processing' (normal in-person orders),
+  /// inventory is deducted immediately after the document is created.
+  ///
+  /// For orders going to 'payment_pending' or 'pending_approval', inventory
+  /// is deducted at confirmation time (see [confirmOnlinePayment] and
+  /// [approveOrder]).
+  ///
+  /// Throws [InsufficientStockException] if stock is insufficient —
+  /// the caller (CheckoutScreen) should surface this before order creation.
   Future<String> placeOrder(OrderModel order) async {
     final doc = await _firestore.collection('orders').add(order.toMap());
-    return doc.id;
+    final orderId = doc.id;
+
+    // Deduct immediately only for normal in-person orders that skip approval
+    // and skip payment_pending (i.e. status is already 'processing').
+    if (order.status == 'processing') {
+      await _inventoryService.deductInventoryForOrder(
+        orderId: orderId,
+        orderItems: order.items,
+      );
+    }
+
+    return orderId;
   }
 
   // Get orders for a customer
@@ -41,18 +66,58 @@ class OrderService {
         });
   }
 
-  // Update order status
+  // ── Order status transitions ────────────────────────────────────────────────
+
+  /// Approves a pending_approval order:
+  ///   - Deducts inventory (atomic, idempotent, oversell-safe).
+  ///   - Sets status to 'processing'.
+  ///
+  /// Throws [InsufficientStockException] if stock is insufficient.
+  /// In that case the order status is NOT changed.
+  Future<void> approveOrder(OrderModel order) async {
+    // Deduct inventory first — if this throws, the order stays pending.
+    await _inventoryService.deductInventoryForOrder(
+      orderId: order.orderId,
+      orderItems: order.items,
+    );
+    // Only update status after inventory is secured.
+    await _firestore.collection('orders').doc(order.orderId).update({
+      'status': 'processing',
+    });
+  }
+
+  /// Updates order status to an arbitrary value (ready, completed, etc.).
+  /// Does NOT touch inventory — use [approveOrder] for approval,
+  /// [cancelOrder] / [rejectOrder] for cancellations.
   Future<void> updateOrderStatus(String orderId, String status) async {
     await _firestore.collection('orders').doc(orderId).update({
       'status': status,
     });
   }
 
-  // Cancel order
-  Future<void> cancelOrder(String orderId) async {
-    await _firestore.collection('orders').doc(orderId).update({
+  /// Cancels an order and restores inventory if it had been deducted.
+  /// Safe to call on pending_approval / payment_pending orders too —
+  /// restore is a no-op if the order was never deducted.
+  Future<void> cancelOrder(OrderModel order) async {
+    await _firestore.collection('orders').doc(order.orderId).update({
       'status': 'cancelled',
     });
+    await _inventoryService.restoreInventoryForOrder(
+      orderId: order.orderId,
+      orderItems: order.items,
+    );
+  }
+
+  /// Rejects a pending_approval order.
+  /// Restores stock as a safety net (no-op if never deducted).
+  Future<void> rejectOrder(OrderModel order) async {
+    await _firestore.collection('orders').doc(order.orderId).update({
+      'status': 'rejected',
+    });
+    await _inventoryService.restoreInventoryForOrder(
+      orderId: order.orderId,
+      orderItems: order.items,
+    );
   }
 
   // Delete a completed/cancelled/rejected order
@@ -111,13 +176,15 @@ class OrderService {
         });
   }
 
-  /// Records an automatic PayMongo payment confirmation in the audit log.
+  /// Records an automatic PayMongo payment confirmation in the audit log
+  /// and deducts inventory for the confirmed order.
   /// Called by [PaymentPendingScreen] after polling confirms 'paid'.
   Future<void> confirmOnlinePayment({
     required String orderId,
     required double amountPaid,
     required double totalPrice,
     required String paymentChannel,
+    required List<Map<String, dynamic>> orderItems,
     String paymongoPaymentId = '',
   }) async {
     final remaining = (totalPrice - amountPaid).clamp(0.0, totalPrice);
@@ -137,6 +204,12 @@ class OrderService {
     }
 
     await _firestore.collection('orders').doc(orderId).update(update);
+
+    // Deduct inventory — idempotent: safe even if called twice.
+    await _inventoryService.deductInventoryForOrder(
+      orderId: orderId,
+      orderItems: orderItems,
+    );
 
     await _firestore
         .collection('orders')
