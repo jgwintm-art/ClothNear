@@ -9,7 +9,12 @@ import '../../../services/cloudinary_service.dart';
 class AddEditItemScreen extends StatefulWidget {
   final ProductModel? product;
 
-  const AddEditItemScreen({super.key, this.product});
+  /// When [viewOnly] is true the screen renders in read-only mode:
+  /// all inputs are disabled, edit/delete controls are hidden, and
+  /// the save button is not shown.  Used by worker accounts.
+  final bool viewOnly;
+
+  const AddEditItemScreen({super.key, this.product, this.viewOnly = false});
 
   @override
   State<AddEditItemScreen> createState() => _AddEditItemScreenState();
@@ -47,6 +52,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
   ];
 
   bool get _isEditing => widget.product != null;
+  bool get _viewOnly => widget.viewOnly;
 
   @override
   void initState() {
@@ -236,12 +242,50 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          _isEditing ? 'Edit Item' : 'Add New Item',
+          _viewOnly
+              ? 'View Item Details'
+              : (_isEditing ? 'Edit Item' : 'Add New Item'),
           style: TextStyle(
             color: Colors.blue[700],
             fontWeight: FontWeight.bold,
           ),
         ),
+        // Workers: show a VIEW-ONLY badge instead of edit affordances
+        actions: _viewOnly
+            ? [
+                Container(
+                  margin: const EdgeInsets.only(right: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.orange[50],
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.lock_outline,
+                        size: 12,
+                        color: Colors.orange[700],
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'View Only',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.orange[700],
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ]
+            : null,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -261,7 +305,9 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                   ),
                   const SizedBox(height: 16),
                   GestureDetector(
-                    onTap: _isUploadingImage ? null : _uploadProductImage,
+                    onTap: (_isUploadingImage || _viewOnly)
+                        ? null
+                        : _uploadProductImage,
                     child: Container(
                       width: double.infinity,
                       height: 180,
@@ -300,50 +346,54 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                                         _buildImagePlaceholder(),
                                   ),
                                 ),
-                                Positioned(
-                                  top: 8,
-                                  right: 8,
-                                  child: GestureDetector(
-                                    onTap: () =>
-                                        setState(() => _productImageUrl = ''),
-                                    child: Container(
-                                      padding: const EdgeInsets.all(4),
-                                      decoration: const BoxDecoration(
-                                        color: Colors.red,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(
-                                        Icons.close,
-                                        color: Colors.white,
-                                        size: 16,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Positioned(
-                                  bottom: 8,
-                                  right: 8,
-                                  child: GestureDetector(
-                                    onTap: _uploadProductImage,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 6,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.blue[700],
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: const Text(
-                                        'Change Photo',
-                                        style: TextStyle(
+                                if (!_viewOnly) ...[
+                                  Positioned(
+                                    top: 8,
+                                    right: 8,
+                                    child: GestureDetector(
+                                      onTap: () =>
+                                          setState(() => _productImageUrl = ''),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: const BoxDecoration(
+                                          color: Colors.red,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.close,
                                           color: Colors.white,
-                                          fontSize: 11,
+                                          size: 16,
                                         ),
                                       ),
                                     ),
                                   ),
-                                ),
+                                  Positioned(
+                                    bottom: 8,
+                                    right: 8,
+                                    child: GestureDetector(
+                                      onTap: _uploadProductImage,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue[700],
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                        child: const Text(
+                                          'Change Photo',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ],
                             )
                           : _buildImagePlaceholder(),
@@ -433,8 +483,10 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                         ),
                         Switch(
                           value: _isCustomizable,
-                          onChanged: (value) =>
-                              setState(() => _isCustomizable = value),
+                          onChanged: _viewOnly
+                              ? null
+                              : (value) =>
+                                    setState(() => _isCustomizable = value),
                           activeThumbColor: Colors.blue[700],
                           activeTrackColor: Colors.blue[200],
                         ),
@@ -459,7 +511,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                     children: _availableSizes.map((size) {
                       final isSelected = _selectedSizes.contains(size);
                       return GestureDetector(
-                        onTap: () => _toggleSize(size),
+                        onTap: _viewOnly ? null : () => _toggleSize(size),
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 16,
@@ -508,7 +560,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                       final color = colorMap['color'] as Color;
                       final isSelected = _selectedColors.contains(colorName);
                       return GestureDetector(
-                        onTap: () => _toggleColor(colorName),
+                        onTap: _viewOnly ? null : () => _toggleColor(colorName),
                         child: Column(
                           children: [
                             Container(
@@ -640,9 +692,14 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                                     child: TextField(
                                       controller: _variantPriceControllers[key],
                                       keyboardType: TextInputType.number,
+                                      readOnly: _viewOnly,
                                       decoration: InputDecoration(
                                         labelText: 'Price ₱',
                                         isDense: true,
+                                        filled: _viewOnly,
+                                        fillColor: _viewOnly
+                                            ? Colors.grey[100]
+                                            : null,
                                         contentPadding:
                                             const EdgeInsets.symmetric(
                                               horizontal: 10,
@@ -658,7 +715,9 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                                             8,
                                           ),
                                           borderSide: BorderSide(
-                                            color: Colors.blue[700]!,
+                                            color: _viewOnly
+                                                ? Colors.grey.shade300
+                                                : Colors.blue[700]!,
                                           ),
                                         ),
                                       ),
@@ -669,9 +728,14 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                                     child: TextField(
                                       controller: _variantStockControllers[key],
                                       keyboardType: TextInputType.number,
+                                      readOnly: _viewOnly,
                                       decoration: InputDecoration(
                                         labelText: 'Stock',
                                         isDense: true,
+                                        filled: _viewOnly,
+                                        fillColor: _viewOnly
+                                            ? Colors.grey[100]
+                                            : null,
                                         contentPadding:
                                             const EdgeInsets.symmetric(
                                               horizontal: 10,
@@ -687,7 +751,9 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                                             8,
                                           ),
                                           borderSide: BorderSide(
-                                            color: Colors.blue[700]!,
+                                            color: _viewOnly
+                                                ? Colors.grey.shade300
+                                                : Colors.blue[700]!,
                                           ),
                                         ),
                                       ),
@@ -706,30 +772,31 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
               ),
             const SizedBox(height: 24),
 
-            // Save Button
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton(
-                onPressed: _isLoading ? null : _saveProduct,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue[700],
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+            // Save Button — hidden for workers (viewOnly)
+            if (!_viewOnly)
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _saveProduct,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue[700],
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
-                ),
-                child: _isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : Text(
-                        _isEditing ? 'Update Item' : 'Save Item',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                  child: _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : Text(
+                          _isEditing ? 'Update Item' : 'Save Item',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
                         ),
-                      ),
+                ),
               ),
-            ),
             const SizedBox(height: 24),
           ],
         ),
@@ -795,6 +862,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
     required IconData icon,
     TextInputType keyboardType = TextInputType.text,
   }) {
+    final isReadOnly = _viewOnly;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -810,14 +878,20 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
         TextField(
           controller: controller,
           keyboardType: keyboardType,
+          readOnly: isReadOnly,
+          style: TextStyle(color: isReadOnly ? Colors.grey[700] : null),
           decoration: InputDecoration(
             hintText: hint,
             prefixIcon: Icon(icon, size: 20),
             isDense: true,
+            filled: isReadOnly,
+            fillColor: isReadOnly ? Colors.grey[100] : null,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: Colors.blue[700]!),
+              borderSide: BorderSide(
+                color: isReadOnly ? Colors.grey.shade300 : Colors.blue[700]!,
+              ),
             ),
           ),
         ),

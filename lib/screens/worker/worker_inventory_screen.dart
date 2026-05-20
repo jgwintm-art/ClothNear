@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/product_model.dart';
 import '../../services/product_service.dart';
+import '../owner/inventory/add_edit_item_screen.dart';
 
 class WorkerInventoryScreen extends StatefulWidget {
   final String storeId;
@@ -239,149 +240,163 @@ class _WorkerInventoryScreenState extends State<WorkerInventoryScreen> {
     );
     final hasWarning = lowStock.isNotEmpty || outOfStock.isNotEmpty;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: outOfStock.length == product.variants.length
-              ? Colors.red[200]!
-              : hasWarning
-              ? Colors.orange[200]!
-              : Colors.grey[200]!,
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => AddEditItemScreen(product: product, viewOnly: true),
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Product image
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: Colors.orange[50],
-                borderRadius: BorderRadius.circular(10),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: outOfStock.length == product.variants.length
+                ? Colors.red[200]!
+                : hasWarning
+                ? Colors.orange[200]!
+                : Colors.grey[200]!,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Product image
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: Colors.orange[50],
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: product.imageUrl.isNotEmpty
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.network(
+                          product.imageUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stack) => Icon(
+                            Icons.checkroom_outlined,
+                            color: Colors.orange[300],
+                          ),
+                        ),
+                      )
+                    : Icon(Icons.checkroom_outlined, color: Colors.orange[300]),
               ),
-              child: product.imageUrl.isNotEmpty
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Image.network(
-                        product.imageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stack) => Icon(
-                          Icons.checkroom_outlined,
-                          color: Colors.orange[300],
-                        ),
-                      ),
-                    )
-                  : Icon(Icons.checkroom_outlined, color: Colors.orange[300]),
-            ),
-            const SizedBox(width: 12),
+              const SizedBox(width: 12),
 
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          product.name,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            product.name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
                           ),
                         ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: totalStock == 0
-                              ? Colors.red[50]
-                              : Colors.blue[50],
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          '$totalStock pcs',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
                             color: totalStock == 0
-                                ? Colors.red[700]
-                                : Colors.blue[700],
+                                ? Colors.red[50]
+                                : Colors.blue[50],
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            '$totalStock pcs',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: totalStock == 0
+                                  ? Colors.red[700]
+                                  : Colors.blue[700],
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    product.type,
-                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                  ),
-                  Text(
-                    product.priceRange,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.orange[700],
-                      fontWeight: FontWeight.w500,
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.chevron_right,
+                          size: 16,
+                          color: Colors.grey[400],
+                        ),
+                      ],
                     ),
-                  ),
-                  if (outOfStock.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 4,
-                      runSpacing: 4,
-                      children: outOfStock
-                          .take(4)
-                          .map(
-                            (v) => Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.red[50],
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(color: Colors.red[200]!),
-                              ),
-                              child: Text(
-                                v,
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  color: Colors.red[700],
+                    const SizedBox(height: 2),
+                    Text(
+                      product.type,
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    ),
+                    Text(
+                      product.priceRange,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.orange[700],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    if (outOfStock.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: outOfStock
+                            .take(4)
+                            .map(
+                              (v) => Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.red[50],
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: Colors.red[200]!),
+                                ),
+                                child: Text(
+                                  v,
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    color: Colors.red[700],
+                                  ),
                                 ),
                               ),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  ],
-                  if (lowStock.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    ...lowStock
-                        .take(3)
-                        .map(
-                          (v) => Text(
-                            '⚠ $v',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.orange[700],
+                            )
+                            .toList(),
+                      ),
+                    ],
+                    if (lowStock.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      ...lowStock
+                          .take(3)
+                          .map(
+                            (v) => Text(
+                              '⚠ $v',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.orange[700],
+                              ),
                             ),
                           ),
-                        ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
-    );
+      ), // closes Container
+    ); // closes GestureDetector
   }
 }
