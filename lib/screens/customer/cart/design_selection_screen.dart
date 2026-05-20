@@ -51,14 +51,15 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
       final fileName = file.name;
 
       String url;
-      if (file.path != null) {
-        // Use file path (desktop/mobile)
-        url = await CloudinaryService.uploadFile(file.path!);
-      } else if (file.bytes != null) {
-        // Use bytes (web)
+      if (file.bytes != null && file.bytes!.isNotEmpty) {
+        // Bytes path — works on ALL platforms (web, mobile, desktop).
         url = await CloudinaryService.uploadBytes(file.bytes!, fileName);
+      } else if (file.path != null && file.path!.isNotEmpty) {
+        // Path path — mobile/desktop only. Never reached on web because
+        // file_picker on web returns null or empty for path.
+        url = await CloudinaryService.uploadFile(file.path!);
       } else {
-        throw Exception('Could not read file');
+        throw Exception('Could not read file — no bytes or path available');
       }
 
       setState(() {
