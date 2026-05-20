@@ -69,90 +69,131 @@ class _POSNavigator extends ConsumerStatefulWidget {
 }
 
 class _POSNavigatorState extends ConsumerState<_POSNavigator> {
-  int _step = 0; // 0 = browse, 1 = cart, 2 = payment
+  // Steps: 0 = browse, 1 = cart, 2 = payment, 3 = success
+  //
+  // The success screen (step 3) lives INSIDE this widget so it remains a
+  // descendant of the ProviderScope created by WorkerPOSScreen. Navigating
+  // away from WorkerPOSScreen with pushReplacement would destroy that
+  // ProviderScope, causing provider disposal mid-flight and leaving a dead
+  // route on the stack. Keeping success in-tree means:
+  //   • "New Sale"  → reset to step 0, clearCart() — no route push/pop
+  //   • "Done"      → Navigator.pop(context) once — back to WorkerHomeScreen
+  int _step = 0;
+
+  // Sale result data — populated by _goToSuccess(), read by step 3.
+  String _successOrderId = '';
+  double _successTotal = 0;
+  double _successTendered = 0;
+  double _successChange = 0;
 
   void _goTo(int step) => setState(() => _step = step);
+
+  void _goToSuccess({
+    required String orderId,
+    required double total,
+    required double tendered,
+    required double change,
+  }) {
+    setState(() {
+      _successOrderId = orderId;
+      _successTotal = total;
+      _successTendered = tendered;
+      _successChange = change;
+      _step = 3;
+    });
+  }
+
+  void _startNewSale() {
+    ref.read(posCartProvider.notifier).clearCart();
+    setState(() => _step = 0);
+  }
 
   @override
   Widget build(BuildContext context) {
     final cartState = ref.watch(posCartProvider);
 
+    // On the success screen, the system back button should pop to home — allow.
+    final canPop = _step == 0 || _step == 3;
+
     return PopScope(
-      canPop: _step == 0,
+      canPop: canPop,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _step > 0) _goTo(_step - 1);
+        if (!didPop && _step > 0 && _step < 3) _goTo(_step - 1);
       },
       child: Scaffold(
         backgroundColor: Colors.grey[50],
-        appBar: AppBar(
-          backgroundColor: Colors.purple[700],
-          foregroundColor: Colors.white,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () {
-              if (_step == 0) {
-                Navigator.pop(context);
-              } else {
-                _goTo(_step - 1);
-              }
-            },
-          ),
-          title: Text(
-            ['New Sale', 'Cart Review', 'Payment'][_step],
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-          actions: [
-            if (_step == 0)
-              Stack(
-                alignment: Alignment.center,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.shopping_cart_outlined),
-                    onPressed: cartState.isEmpty ? null : () => _goTo(1),
-                  ),
-                  if (cartState.itemCount > 0)
-                    Positioned(
-                      right: 6,
-                      top: 6,
-                      child: Container(
-                        padding: const EdgeInsets.all(3),
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
+        // Hide the AppBar entirely on the success screen — it has its own layout.
+        appBar: _step == 3
+            ? null
+            : AppBar(
+                backgroundColor: Colors.purple[700],
+                foregroundColor: Colors.white,
+                elevation: 0,
+                leading: IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: () {
+                    if (_step == 0) {
+                      Navigator.pop(context);
+                    } else {
+                      _goTo(_step - 1);
+                    }
+                  },
+                ),
+                title: Text(
+                  ['New Sale', 'Cart Review', 'Payment'][_step],
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                actions: [
+                  if (_step == 0)
+                    Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.shopping_cart_outlined),
+                          onPressed: cartState.isEmpty ? null : () => _goTo(1),
                         ),
-                        child: Text(
-                          '${cartState.itemCount}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.purple[700],
+                        if (cartState.itemCount > 0)
+                          Positioned(
+                            right: 6,
+                            top: 6,
+                            child: Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Text(
+                                '${cartState.itemCount}',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.purple[700],
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
+                      ],
                     ),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 16),
+                    child: Row(
+                      children: List.generate(3, (i) {
+                        return Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 3),
+                          width: i == _step ? 18 : 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: i == _step
+                                ? Colors.white
+                                : Colors.white.withValues(alpha: 0.4),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
                 ],
               ),
-            Padding(
-              padding: const EdgeInsets.only(right: 16),
-              child: Row(
-                children: List.generate(3, (i) {
-                  return Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    width: i == _step ? 18 : 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: i == _step
-                          ? Colors.white
-                          : Colors.white.withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  );
-                }),
-              ),
-            ),
-          ],
-        ),
         body: IndexedStack(
           index: _step,
           children: [
@@ -166,6 +207,18 @@ class _POSNavigatorState extends ConsumerState<_POSNavigator> {
               storeName: widget.storeName,
               workerName: widget.workerName,
               onBack: () => _goTo(1),
+              onSaleComplete: _goToSuccess,
+            ),
+            // Step 3 — success. Always present in the stack so IndexedStack
+            // never receives an out-of-range index. The data fields default to
+            // empty/zero until _goToSuccess() populates them.
+            _POSSaleSuccessScreen(
+              orderId: _successOrderId,
+              total: _successTotal,
+              tendered: _successTendered,
+              change: _successChange,
+              onNewSale: _startNewSale,
+              onDone: () => Navigator.pop(context),
             ),
           ],
         ),
@@ -899,12 +952,20 @@ class _PaymentStep extends ConsumerStatefulWidget {
   final String storeName;
   final String workerName;
   final VoidCallback onBack;
+  final void Function({
+    required String orderId,
+    required double total,
+    required double tendered,
+    required double change,
+  })
+  onSaleComplete;
 
   const _PaymentStep({
     required this.storeId,
     required this.storeName,
     required this.workerName,
     required this.onBack,
+    required this.onSaleComplete,
   });
 
   @override
@@ -983,25 +1044,25 @@ class _PaymentStepState extends ConsumerState<_PaymentStep> {
       // placeOrder deducts inventory (status == 'processing' triggers it).
       final orderId = await OrderService().placeOrder(order);
 
-      // Snapshot the values we need for the success screen BEFORE clearing.
+      // Snapshot all values needed for the success screen BEFORE clearing
+      // the cart. clearCart() triggers a provider state change; reading
+      // cartState after it would return zero values.
       final saleTotal = cartState.total;
       final change = _change;
       final tendered = _tendered;
 
-      // Clear the cart — safe because we've already read all values above.
+      // Clear cart state — safe: all values already snapshotted above.
       ref.read(posCartProvider.notifier).clearCart();
 
       if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => _POSSaleSuccessScreen(
-            orderId: orderId,
-            total: saleTotal,
-            change: change,
-            tendered: tendered,
-          ),
-        ),
+      // Hand control back to _POSNavigatorState via callback.
+      // _POSNavigatorState.setState() transitions to step 3 (success)
+      // without touching the Navigator route stack at all.
+      widget.onSaleComplete(
+        orderId: orderId,
+        total: saleTotal,
+        tendered: tendered,
+        change: change,
       );
     } on InsufficientStockException catch (e) {
       if (!mounted) return;
@@ -1290,12 +1351,17 @@ class _POSSaleSuccessScreen extends StatelessWidget {
   final double total;
   final double tendered;
   final double change;
+  // Callbacks injected by _POSNavigatorState — no Navigator calls here.
+  final VoidCallback onNewSale;
+  final VoidCallback onDone;
 
   const _POSSaleSuccessScreen({
     required this.orderId,
     required this.total,
     required this.tendered,
     required this.change,
+    required this.onNewSale,
+    required this.onDone,
   });
 
   @override
@@ -1380,11 +1446,7 @@ class _POSSaleSuccessScreen extends StatelessWidget {
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.of(context)
-                          ..pop()
-                          ..pop();
-                      },
+                      onPressed: onDone,
                       icon: const Icon(Icons.home_outlined),
                       label: const Text('Done'),
                       style: OutlinedButton.styleFrom(
@@ -1398,9 +1460,7 @@ class _POSSaleSuccessScreen extends StatelessWidget {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                      },
+                      onPressed: onNewSale,
                       icon: const Icon(Icons.add_shopping_cart),
                       label: const Text('New Sale'),
                       style: ElevatedButton.styleFrom(
