@@ -85,7 +85,7 @@ class OrderService {
 
     // Step 2 — build the order document.
     final order = OrderModel(
-      orderId: '',            // will be replaced by the doc ID below
+      orderId: '', // will be replaced by the doc ID below
       customerUid: 'walk_in',
       storeId: storeId,
       storeName: storeName,
@@ -95,7 +95,7 @@ class OrderService {
       remainingBalance: 0.0,
       paymentType: 'full',
       orderType: 'walk_in',
-      status: 'processing',   // immediate — no approval needed
+      status: 'processing', // immediate — no approval needed
       designType: 'none',
       createdAt: now,
       // ── NEW fields ───────────────────────────────────────────────────────
@@ -280,9 +280,18 @@ class OrderService {
     if (workerUid != null) {
       query = query.where('workerUid', isEqualTo: workerUid);
     }
+
+    // If a specific status filter is active, use it.
+    // Otherwise exclude all non-revenue statuses.
     if (status != null) {
       query = query.where('status', isEqualTo: status);
+    } else {
+      query = query.where(
+        'status',
+        whereIn: ['processing', 'ready', 'completed'],
+      );
     }
+
     if (fromDate != null) {
       query = query.where(
         'createdAt',
@@ -298,10 +307,7 @@ class OrderService {
 
     query = query.orderBy('createdAt', descending: true).limit(limit);
 
-    if (startAfter != null) {
-      query = query.startAfterDocument(startAfter);
-    }
-
+    if (startAfter != null) query = query.startAfterDocument(startAfter);
     return query.get();
   }
 
@@ -315,13 +321,11 @@ class OrderService {
         .collection('orders')
         .where('storeId', isEqualTo: storeId)
         .where('workerUid', isEqualTo: workerUid)
+        .where('status', whereIn: ['processing', 'completed', 'ready'])
         .orderBy('createdAt', descending: true)
         .limit(limit);
 
-    if (startAfter != null) {
-      query = query.startAfterDocument(startAfter);
-    }
-
+    if (startAfter != null) query = query.startAfterDocument(startAfter);
     return query.get();
   }
 

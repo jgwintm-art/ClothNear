@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:clothnear/models/order_model.dart';
 import 'package:clothnear/models/product_model.dart';
 import 'package:clothnear/services/inventory_service.dart';
 import 'package:clothnear/services/order_service.dart';
@@ -205,6 +204,7 @@ class _POSNavigatorState extends ConsumerState<_POSNavigator> {
             _PaymentStep(
               storeId: widget.storeId,
               storeName: widget.storeName,
+              workerUid: widget.workerUid,
               workerName: widget.workerName,
               onBack: () => _goTo(1),
               onSaleComplete: _goToSuccess,
@@ -950,6 +950,7 @@ class _CartReviewStep extends ConsumerWidget {
 class _PaymentStep extends ConsumerStatefulWidget {
   final String storeId;
   final String storeName;
+  final String workerUid;
   final String workerName;
   final VoidCallback onBack;
   final void Function({
@@ -963,6 +964,7 @@ class _PaymentStep extends ConsumerStatefulWidget {
   const _PaymentStep({
     required this.storeId,
     required this.storeName,
+    required this.workerUid,
     required this.workerName,
     required this.onBack,
     required this.onSaleComplete,
@@ -1003,61 +1005,25 @@ class _PaymentStepState extends ConsumerState<_PaymentStep> {
     final cartState = ref.read(posCartProvider);
 
     try {
-      // Pre-flight stock check before creating the Firestore document.
-      final stockResult = await InventoryService().checkStock(
-        cartState.orderItems,
-      );
-      if (!stockResult.isOk) {
-        setState(() {
-          _error = stockResult.errors.map((e) => e.userMessage).join('\n');
-          _isProcessing = false;
-        });
-        return;
-      }
-
-      // CRITICAL FIX: OrderModel requires designType as a required named param.
-      // The original code omitted it → compile error / type mismatch at runtime.
-      // Walk-in POS sales have no custom design, so 'none' is the correct value.
-      final order = OrderModel(
-        orderId: '',
-        customerUid: 'walk_in',
+      final orderId = await OrderService().createPosOrder(
         storeId: widget.storeId,
         storeName: widget.storeName,
+        workerUid: widget.workerUid,
+        workerName: widget.workerName,
         items: cartState.orderItems,
         totalPrice: cartState.total,
-        amountPaid: cartState.total,
-        remainingBalance: 0.0,
-        paymentType: 'full',
-        orderType: 'walk_in',
-        status: 'processing',
-        designType: 'none', // required field — omitted in original
-        designUrl: '',
-        designName: '',
-        specialInstructions: '',
-        createdAt: DateTime.now(),
-        // Payment audit fields
+        amountTendered: _tendered,
         paymentMethod: 'cash',
-        paymentConfirmedAt: DateTime.now().millisecondsSinceEpoch,
-        paymentConfirmedBy: widget.workerName,
       );
 
-      // placeOrder deducts inventory (status == 'processing' triggers it).
-      final orderId = await OrderService().placeOrder(order);
-
-      // Snapshot all values needed for the success screen BEFORE clearing
-      // the cart. clearCart() triggers a provider state change; reading
-      // cartState after it would return zero values.
       final saleTotal = cartState.total;
       final change = _change;
       final tendered = _tendered;
 
-      // Clear cart state — safe: all values already snapshotted above.
       ref.read(posCartProvider.notifier).clearCart();
 
       if (!mounted) return;
-      // Hand control back to _POSNavigatorState via callback.
-      // _POSNavigatorState.setState() transitions to step 3 (success)
-      // without touching the Navigator route stack at all.
+
       widget.onSaleComplete(
         orderId: orderId,
         total: saleTotal,
@@ -1066,12 +1032,14 @@ class _PaymentStepState extends ConsumerState<_PaymentStep> {
       );
     } on InsufficientStockException catch (e) {
       if (!mounted) return;
+
       setState(() {
         _error = e.userMessage;
         _isProcessing = false;
       });
     } catch (e) {
       if (!mounted) return;
+
       setState(() {
         _error = e.toString().replaceAll('Exception: ', '');
         _isProcessing = false;
