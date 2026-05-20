@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../models/store_model.dart';
 import '../../services/store_service.dart';
+import '../../services/cloudinary_service.dart';
 
 class EditShopScreen extends StatefulWidget {
   final StoreModel store;
@@ -22,6 +24,8 @@ class _EditShopScreenState extends State<EditShopScreen> {
   late final TextEditingController _hoursController;
   final _storeService = StoreService();
   bool _isLoading = false;
+  String _imageUrl = '';
+  bool _isUploadingImage = false;
 
   @override
   void initState() {
@@ -34,6 +38,7 @@ class _EditShopScreenState extends State<EditShopScreen> {
     _instagramController = TextEditingController(text: widget.store.instagramUrl);
     _tiktokController = TextEditingController(text: widget.store.tiktokUrl);
     _hoursController = TextEditingController(text: widget.store.businessHours);
+    _imageUrl = widget.store.imageUrl;
   }
 
   @override
@@ -47,6 +52,43 @@ class _EditShopScreenState extends State<EditShopScreen> {
     _tiktokController.dispose();
     _hoursController.dispose();
     super.dispose();
+  }
+
+  Future<void> _uploadLogo() async {
+    setState(() => _isUploadingImage = true);
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        withData: true,
+      );
+      if (result == null) {
+        setState(() => _isUploadingImage = false);
+        return;
+      }
+      final file = result.files.single;
+      final fileName = file.name.replaceAll('\\', '/').split('/').last;
+      String url;
+      if (file.bytes != null && file.bytes!.isNotEmpty) {
+        url = await CloudinaryService.uploadBytes(file.bytes!, fileName);
+      } else if (file.path != null && file.path!.isNotEmpty) {
+        url = await CloudinaryService.uploadFile(file.path!);
+      } else {
+        throw Exception('Could not read file');
+      }
+      if (mounted) {
+        setState(() {
+          _imageUrl = url;
+          _isUploadingImage = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isUploadingImage = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload failed: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _saveChanges() async {
@@ -72,6 +114,7 @@ class _EditShopScreenState extends State<EditShopScreen> {
         'instagramUrl': _instagramController.text.trim(),
         'tiktokUrl': _tiktokController.text.trim(),
         'businessHours': _hoursController.text.trim(),
+        'imageUrl': _imageUrl,
       };
 
       await _storeService.updateStore(widget.store.storeId, updatedData);
@@ -117,6 +160,28 @@ class _EditShopScreenState extends State<EditShopScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Center(
+              child: GestureDetector(
+                onTap: _uploadLogo,
+                child: Container(
+                  width: 120,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    color: Colors.blue[50],
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.blue[100]!),
+                  ),
+                  child: _isUploadingImage
+                      ? const Center(child: CircularProgressIndicator())
+                      : _imageUrl.isNotEmpty
+                          ? ClipOval(
+                              child: Image.network(_imageUrl, fit: BoxFit.cover),
+                            )
+                          : const Icon(Icons.add_a_photo, size: 40),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
             _buildTextField(
               controller: _storeNameController,
               label: 'Store Name',

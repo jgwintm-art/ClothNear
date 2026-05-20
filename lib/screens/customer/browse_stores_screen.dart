@@ -143,9 +143,20 @@ class _BrowseStoresScreenState extends State<BrowseStoresScreen> {
                   top: Radius.circular(16),
                 ),
               ),
-              child: Center(
-                child: Icon(Icons.store, size: 64, color: Colors.blue[200]),
-              ),
+              child: store.imageUrl.isNotEmpty
+                  ? ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(16),
+                      ),
+                      child: Image.network(
+                        store.imageUrl,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                      ),
+                    )
+                  : Center(
+                      child: Icon(Icons.store, size: 64, color: Colors.blue[200]),
+                    ),
             ),
             Padding(
               padding: const EdgeInsets.all(16),

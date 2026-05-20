@@ -24,12 +24,17 @@ class StoreDetailsScreen extends StatelessWidget {
               onPressed: () => Navigator.pop(context),
             ),
             flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                color: Colors.blue[100],
-                child: Center(
-                  child: Icon(Icons.store, size: 64, color: Colors.blue[300]),
-                ),
-              ),
+              background: store.imageUrl.isNotEmpty
+                  ? Image.network(
+                      store.imageUrl,
+                      fit: BoxFit.cover,
+                    )
+                  : Container(
+                      color: Colors.blue[100],
+                      child: Center(
+                        child: Icon(Icons.store, size: 64, color: Colors.blue[300]),
+                      ),
+                    ),
             ),
           ),
           SliverToBoxAdapter(
