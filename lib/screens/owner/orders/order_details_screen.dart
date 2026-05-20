@@ -367,63 +367,97 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                   const SizedBox(height: 12),
 
                   // Design
-                  _buildCard(
-                    title: 'Design',
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: _order.designType == 'custom'
-                                ? Colors.purple[50]
-                                : Colors.blue[50],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Icon(
-                            _order.designType == 'custom'
-                                ? Icons.upload_file_outlined
-                                : Icons.checkroom_outlined,
-                            color: _order.designType == 'custom'
-                                ? Colors.purple[700]
-                                : Colors.blue[700],
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _order.designType == 'custom'
-                                    ? 'Custom Design Uploaded'
-                                    : 'Plain — No Design',
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                  Builder(
+                    builder: (context) {
+                      final hasCustomDesign = _order.items.any(
+                        (item) => item['isPlain'] == false,
+                      );
+                      final customItems = _order.items
+                          .where((item) => item['isPlain'] == false)
+                          .toList();
+
+                      return _buildCard(
+                        title: 'Design',
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: hasCustomDesign
+                                    ? Colors.purple[50]
+                                    : Colors.blue[50],
+                                borderRadius: BorderRadius.circular(8),
                               ),
-                              if (_order.designType == 'custom' &&
-                                  _order.designUrl.isNotEmpty)
-                                TextButton(
-                                  onPressed: () {},
-                                  style: TextButton.styleFrom(
-                                    padding: EdgeInsets.zero,
-                                    minimumSize: Size.zero,
-                                  ),
-                                  child: Text(
-                                    'View Design File',
-                                    style: TextStyle(
-                                      color: Colors.blue[700],
-                                      fontSize: 12,
+                              child: Icon(
+                                hasCustomDesign
+                                    ? Icons.upload_file_outlined
+                                    : Icons.checkroom_outlined,
+                                color: hasCustomDesign
+                                    ? Colors.purple[700]
+                                    : Colors.blue[700],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    hasCustomDesign
+                                        ? 'Custom Design Uploaded'
+                                        : 'Plain — No Design',
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                ),
-                            ],
-                          ),
+                                  if (hasCustomDesign && customItems.isNotEmpty)
+                                    TextButton(
+                                      onPressed: () {
+                                        // Simple preview logic for the first custom item's design
+                                        final firstCustom = customItems.first;
+                                        final url = firstCustom['customDesignUrl'];
+                                        if (url != null && url.isNotEmpty) {
+                                          showDialog(
+                                            context: context,
+                                            builder: (_) => Dialog(
+                                              child: Stack(
+                                                children: [
+                                                  InteractiveViewer(child: Image.network(url)),
+                                                  Positioned(
+                                                    top: 8,
+                                                    right: 8,
+                                                    child: IconButton(
+                                                      icon: const Icon(Icons.close, color: Colors.white),
+                                                      onPressed: () => Navigator.pop(context),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                      },
+                                      style: TextButton.styleFrom(
+                                        padding: EdgeInsets.zero,
+                                        minimumSize: Size.zero,
+                                      ),
+                                      child: Text(
+                                        'View Design File',
+                                        style: TextStyle(
+                                          color: Colors.blue[700],
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 12),
 
