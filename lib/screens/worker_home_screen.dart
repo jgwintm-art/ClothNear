@@ -42,12 +42,6 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
 
       final data = userDoc.data()!;
 
-      // Lazy migration: backfill any permission keys that did not exist when
-      // this worker account was originally created (e.g. canUsePOS for
-      // accounts created before the POS feature was added).
-      // WorkerModel._migratePermissions() defines the canonical key set.
-      // We compare against the raw Firestore map and write only missing keys
-      // so we never overwrite values the owner has already set.
       final rawPerms = Map<String, dynamic>.from(data['permissions'] ?? {});
       const knownDefaults = {
         'canUpdateOrderStatus': false,

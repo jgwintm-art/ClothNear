@@ -1,16 +1,3 @@
-// lib/screens/worker/worker_sales_history_screen.dart
-//
-// Worker Sales History Screen.
-//
-// Shows only the current worker's own POS transactions.
-// Online orders and other workers' sales are never fetched or displayed.
-//
-// Features:
-//   • Daily summary card (today's total + transaction count)
-//   • Paginated list (20 per page, load-more on scroll)
-//   • Pull-to-refresh
-//   • Transaction detail bottom sheet
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';

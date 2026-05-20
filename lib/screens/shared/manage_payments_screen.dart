@@ -6,16 +6,7 @@ import '../../services/order_service.dart';
 import '../../services/auth_service.dart';
 
 /// Manage Payments — used by Owner and Worker/Cashier.
-///
-/// Improvements:
-/// - Resolved payment status badge (Paid / Partial / Unpaid / Awaiting Online)
-/// - Payment timestamp on confirmed orders
-/// - Confirmer name on manual payments
-/// - PayMongo payment ID (tap to copy)
-/// - Optional payment note on cards
-/// - Amount-editable confirm dialog with note field
-/// - Immutable payment_events audit log (bottom sheet)
-/// - Routes through OrderService for full audit trail
+
 class ManagePaymentsScreen extends StatefulWidget {
   final String storeId;
   final bool canConfirmPayments;

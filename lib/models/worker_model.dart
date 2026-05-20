@@ -33,9 +33,6 @@ class WorkerModel {
   /// Ensures legacy permission documents that pre-date a given permission key
   /// are backfilled with a safe [false] default rather than omitting the key
   /// entirely. Called from [fromMap] on every deserialization.
-  ///
-  /// Adding a new permission in the future: add its key with a [false] default
-  /// to [_knownPermissions] — legacy documents will be handled automatically.
   static const Map<String, bool> _knownPermissions = {
     'canUpdateOrderStatus': false,
     'canConfirmPayments': false,

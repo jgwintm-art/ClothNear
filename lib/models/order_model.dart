@@ -1,17 +1,3 @@
-// lib/models/order_model.dart
-//
-// CHANGES FROM ORIGINAL:
-//   • Added [orderSource]       — 'online' | 'pos'   (default: 'online' for BC)
-//   • Added [workerUid]         — uid of the worker who processed a POS sale
-//   • Added [workerName]        — denormalized display name (avoids join queries)
-//
-// All three are nullable/defaulted — every existing Firestore document that
-// lacks these keys will deserialize safely via the null-coalescing fallbacks
-// in fromMap().  No migration script required before deploying.
-//
-// toMap() only writes the fields when they are non-null, preserving the
-// existing behaviour of keeping online order documents clean.
-
 class OrderModel {
   final String orderId;
   final String customerUid;
@@ -32,14 +18,8 @@ class OrderModel {
   final String specialInstructions;
   final DateTime createdAt;
 
-  // ── NEW: Sales-history classification fields ─────────────────────────────────
+  // ── Sales-history classification fields ─────────────────────────────────
 
-  /// Source of this order.
-  /// 'online' — placed by a customer through the app.
-  /// 'pos'    — walk-in sale processed by a worker at the POS terminal.
-  ///
-  /// Defaults to 'online' for all existing documents that pre-date this field.
-  /// The sales-history queries rely on this field + Firestore composite indexes.
   final String orderSource; // 'online' | 'pos'
 
   /// UID of the worker who processed this sale.
@@ -81,7 +61,7 @@ class OrderModel {
     this.designName = '',
     this.specialInstructions = '',
     required this.createdAt,
-    // NEW — default 'online' keeps all call sites that omit this field valid.
+    // default 'online' keeps all call sites that omit this field valid.
     this.orderSource = 'online',
     this.workerUid,
     this.workerName,
@@ -122,7 +102,7 @@ class OrderModel {
                 ? map['createdAt'] as DateTime
                 : (map['createdAt'] as dynamic).toDate()
           : DateTime.now(),
-      // NEW — null-coalesce to 'online' so every legacy document is safe.
+      // null-coalesce to 'online' so every legacy document is safe.
       orderSource: map['orderSource'] as String? ?? 'online',
       workerUid: map['workerUid'] as String?,
       workerName: map['workerName'] as String?,
@@ -157,7 +137,6 @@ class OrderModel {
       'designName': designName,
       'specialInstructions': specialInstructions,
       'createdAt': createdAt.millisecondsSinceEpoch,
-      // NEW — always written so the Firestore index can use this field.
       'orderSource': orderSource,
     };
 

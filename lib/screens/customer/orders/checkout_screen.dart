@@ -40,9 +40,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   bool _isLoading = false;
 
   /// Live total computed from the actual items list.
-  /// This ensures the price is always accurate regardless of what was passed
-  /// in as [widget.totalAmount], and updates correctly when [setState] is
-  /// called (e.g. after the user changes payment type or order type).
+
   double get _computedTotal =>
       widget.items.fold(0.0, (sum, item) => sum + item.totalPrice);
 

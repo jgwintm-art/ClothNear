@@ -7,18 +7,6 @@ import 'package:clothnear/services/order_service.dart';
 import 'package:clothnear/services/product_service.dart';
 import 'package:clothnear/services/worker_pos_cart_provider.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Entry point
-//
-// CRITICAL FIX: WorkerPOSScreen is a plain StatelessWidget that wraps its
-// subtree in a ProviderScope. This is the ONLY place in the app where
-// posCartProvider lives — it is scoped to this screen and is automatically
-// disposed when the worker exits the POS flow, giving each new sale a clean
-// cart. Without this ProviderScope, any ConsumerWidget below would attempt to
-// read posCartProvider from the root ProviderScope (which doesn't exist in
-// main.dart) causing a ProviderNotFoundException at runtime → blank gray screen.
-// ─────────────────────────────────────────────────────────────────────────────
-
 class WorkerPOSScreen extends StatelessWidget {
   final String storeId;
   final String storeName;
@@ -358,12 +346,6 @@ class _ProductBrowserStepState extends State<_ProductBrowserStep> {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Product card
-//
-// FIX: _showVariantSheet passes the WidgetRef captured from build() into the
-// sheet builder via ProviderScope.overrides so the sheet's ConsumerWidget can
-// read the same posCartProvider instance. But the simpler correct approach
-// here is to pass a plain callback from build() — this avoids passing ref
-// across BuildContext boundaries into modal routes.
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _ProductCard extends ConsumerWidget {
@@ -461,11 +443,6 @@ class _ProductCard extends ConsumerWidget {
   }
 
   void _showVariantSheet(BuildContext context, WidgetRef ref) {
-    // CRITICAL FIX: capture the notifier reference BEFORE entering the modal
-    // builder. The modal's builder receives a different BuildContext that is
-    // no longer a descendant of this ConsumerWidget's scope. Reading
-    // posCartProvider inside builder(_) would fail because that context
-    // has no ref. Instead we pass the notifier directly as a callback.
     final notifier = ref.read(posCartProvider.notifier);
 
     showModalBottomSheet(

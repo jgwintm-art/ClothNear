@@ -21,10 +21,8 @@ class CustomerHomeScreen extends StatelessWidget {
             fontWeight: FontWeight.bold,
           ),
         ),
-        // ✅ CHANGED: actions now has 3 buttons instead of just logout
-        // Added cart icon with badge and orders icon
+
         actions: [
-          // ✅ NEW: Cart icon with live badge counter
           StreamBuilder<int>(
             stream: CartService().getCartCount(
               FirebaseAuth.instance.currentUser?.uid ?? '',
@@ -74,7 +72,7 @@ class CustomerHomeScreen extends StatelessWidget {
               );
             },
           ),
-          // ✅ NEW: Orders icon to view order status
+          // ✅ Orders icon to view order status
           IconButton(
             icon: Icon(Icons.receipt_long_outlined, color: Colors.blue[700]),
             onPressed: () => Navigator.push(
@@ -84,7 +82,7 @@ class CustomerHomeScreen extends StatelessWidget {
               ),
             ),
           ),
-          // ✅ UNCHANGED: Logout button — same as before
+          // ✅ Logout button
           IconButton(
             icon: Icon(Icons.logout, color: Colors.blue[700]),
             onPressed: () async {

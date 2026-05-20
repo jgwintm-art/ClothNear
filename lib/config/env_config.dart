@@ -7,9 +7,6 @@ import 'api_secrets.dart';
 ///   3. .env file (local development)
 class EnvConfig {
   static Future<void> load() async {
-    // Only skip .env loading if a compile-time key is already baked in.
-    // Do NOT read dotenv.env here — it isn't loaded yet and will throw
-    // NotInitializedError.
     if (ApiSecrets.geminiApiKey.isNotEmpty) return;
     const fromDefine = String.fromEnvironment('GEMINI_API_KEY');
     if (fromDefine.isNotEmpty) return;
