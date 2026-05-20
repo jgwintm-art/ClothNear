@@ -171,9 +171,13 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isUploadingImage = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Image upload failed: $e')));
+      debugPrint('[AddEditItem] Image upload exception: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Upload failed: ${e.toString()}'),
+          backgroundColor: Colors.red[700],
+        ),
+      );
     }
   }
 

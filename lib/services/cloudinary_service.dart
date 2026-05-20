@@ -75,15 +75,19 @@ class CloudinaryService {
         );
 
       streamed = await request.send();
+    } on http.ClientException catch (e) {
+      debugPrint('[Cloudinary] Network error: $e');
+      throw CloudinaryUploadException(
+        'Network error during upload: ${e.message}',
+      );
     } catch (e, stack) {
-      // Surface the REAL exception — never swallow into a generic string.
-      debugPrint('[Cloudinary] Network/request error: $e');
+      debugPrint('[Cloudinary] Unexpected exception: $e');
       debugPrintStack(
         stackTrace: stack,
         label: 'CloudinaryService.uploadBytes',
       );
       throw CloudinaryUploadException(
-        'Network request failed (${e.runtimeType}): $e',
+        'Unexpected upload error (${e.runtimeType}): ${e.toString()}',
       );
     }
 

@@ -69,10 +69,11 @@ class _DesignSelectionScreenState extends State<DesignSelectionScreen> {
       });
     } catch (e) {
       setState(() => _isUploading = false);
+      debugPrint('[DesignSelection] Upload failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+        ).showSnackBar(SnackBar(content: Text('Upload failed: ${e.toString()}')));
       }
     }
   }
