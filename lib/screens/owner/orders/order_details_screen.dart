@@ -889,20 +889,58 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   }
 
   Widget _buildItemRow(Map<String, dynamic> item) {
+    final bool isCustom = item['isPlain'] == false;
+    final String? designUrl = item['customDesignUrl'];
+
+    void showFullImage(String url) {
+      showDialog(
+        context: context,
+        builder: (_) => Dialog(
+          child: Stack(
+            children: [
+              InteractiveViewer(child: Image.network(url)),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
+          // Thumbnail
           Container(
-            width: 36,
-            height: 36,
+            width: 48,
+            height: 48,
             decoration: BoxDecoration(
               color: Colors.blue[50],
               borderRadius: BorderRadius.circular(6),
             ),
-            child:
-                item['productImageUrl'] != null &&
-                    item['productImageUrl'].isNotEmpty
+            child: isCustom && designUrl != null && designUrl.isNotEmpty
+                ? GestureDetector(
+                    onTap: () => showFullImage(designUrl),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: Image.network(
+                        designUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (c, e, s) => const Center(
+                          child: Icon(Icons.broken_image, size: 24),
+                        ),
+                      ),
+                    ),
+                  )
+                : (item['productImageUrl'] != null &&
+                        item['productImageUrl'].isNotEmpty)
                 ? ClipRRect(
                     borderRadius: BorderRadius.circular(6),
                     child: Image.network(
@@ -933,10 +971,28 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                   '${item['color']} • ${item['size']} × ${item['quantity']}',
                   style: TextStyle(fontSize: 11, color: Colors.grey[500]),
                 ),
-                if (item['isPlain'] == false)
-                  Text(
-                    'Custom Design',
-                    style: TextStyle(fontSize: 10, color: Colors.purple[600]),
+                if (isCustom)
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.purple[50],
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'Custom Design',
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: Colors.purple[700],
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
               ],
             ),
