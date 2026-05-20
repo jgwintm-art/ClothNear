@@ -120,11 +120,11 @@ class StoreDetailsScreen extends StatelessWidget {
                         runSpacing: 16,
                         children: [
                           if (store.facebookUrl.isNotEmpty)
-                            _buildSocialIcon(Icons.facebook, 'Facebook', store.facebookUrl),
+                            _buildSocialIcon(Icons.facebook, store.facebookUrl, store.facebookUrl),
                           if (store.instagramUrl.isNotEmpty)
-                            _buildSocialIcon(Icons.camera_alt, 'Instagram', store.instagramUrl),
+                            _buildSocialIcon(Icons.camera_alt, store.instagramUrl, store.instagramUrl),
                           if (store.tiktokUrl.isNotEmpty)
-                            _buildSocialIcon(Icons.video_library, 'TikTok', store.tiktokUrl),
+                            _buildSocialIcon(Icons.video_library, store.tiktokUrl, store.tiktokUrl),
                         ],
                       ),
                     ),
@@ -188,7 +188,7 @@ class StoreDetailsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSocialIcon(IconData icon, String label, String url) {
+  Widget _buildSocialIcon(IconData icon, String handle, String url) {
     return GestureDetector(
       onTap: () async {
         final uri = Uri.parse(url);
@@ -201,7 +201,7 @@ class StoreDetailsScreen extends StatelessWidget {
           Icon(icon, size: 28, color: Colors.blue[700]),
           const SizedBox(height: 4),
           Text(
-            label,
+            handle,
             style: TextStyle(fontSize: 11, color: Colors.grey[700]),
           ),
         ],
