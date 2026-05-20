@@ -7,6 +7,7 @@ import '../services/auth_service.dart';
 import 'worker/worker_orders_screen.dart';
 import 'worker/worker_inventory_screen.dart';
 import 'shared/manage_payments_screen.dart';
+import 'package:clothnear/screens/worker/worker_pos_screen.dart';
 
 class WorkerHomeScreen extends StatefulWidget {
   const WorkerHomeScreen({super.key});
@@ -169,6 +170,27 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
             context,
             MaterialPageRoute(
               builder: (_) => WorkerInventoryScreen(storeId: store.storeId),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (permissions['canProcessSales'] == true) {
+      menuItems.add(
+        _WorkerMenuItem(
+          icon: Icons.point_of_sale_rounded,
+          label: 'New Sale',
+          color: Colors.purple[700]!,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => WorkerPOSScreen(
+                storeId: store.storeId,
+                storeName: store.storeName,
+                workerUid: worker.uid,
+                workerName: worker.name,
+              ),
             ),
           ),
         ),

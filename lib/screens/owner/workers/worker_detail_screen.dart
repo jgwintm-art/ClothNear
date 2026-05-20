@@ -117,6 +117,7 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
     required String subtitle,
     required String key,
     required IconData icon,
+    Color? activeColor,
   }) {
     return SwitchListTile(
       value: _permissions[key] ?? false,
@@ -129,8 +130,8 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
         subtitle,
         style: TextStyle(fontSize: 12, color: Colors.grey[600]),
       ),
-      secondary: Icon(icon, color: Colors.blue[700]),
-      activeThumbColor: Colors.blue[700],
+      secondary: Icon(icon, color: activeColor ?? Colors.blue[700]),
+      activeThumbColor: activeColor ?? Colors.blue[700],
     );
   }
 
@@ -316,6 +317,16 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
                       subtitle: 'View product stock levels and availability',
                       key: 'canViewInventory',
                       icon: Icons.inventory_2_outlined,
+                    ),
+                    // ── NEW: POS Sales permission ──────────────────────────
+                    const Divider(height: 8),
+                    _buildPermissionTile(
+                      label: 'Process Walk-in Sales (POS)',
+                      subtitle:
+                          'Create walk-in orders and accept cash payments at point of sale',
+                      key: 'canProcessSales',
+                      icon: Icons.point_of_sale_rounded,
+                      activeColor: Colors.purple[700],
                     ),
                   ],
                 ),
