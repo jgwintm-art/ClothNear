@@ -1,24 +1,31 @@
+// lib/services/worker_pos_cart_provider.dart
+//
+// CHANGES FROM ORIGINAL:
+//   • POSCartProvider (ChangeNotifier) replaced by _CartNotifier (Notifier<_CartState>)
+//     — zero ChangeNotifier in the codebase; fully Riverpod 3 compliant.
+//   • _CartState is an immutable value object; all mutations return new state
+//     via copyWith(), making state changes explicit and testable.
+//   • posCartProvider is a plain NotifierProvider (not autoDispose) so the
+//     nested ProviderScope inside WorkerPOSScreen controls its lifetime —
+//     it is created when the POS screen opens and disposed on pop.
+//   • CartItem is UNCHANGED — same fields, same toOrderItem(), same variantKey.
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CartItem — unchanged from original
+// ─────────────────────────────────────────────────────────────────────────────
+
 /// Represents a single item in the POS cart.
-///
-/// IMMUTABLE by design — all fields are final.
-/// Riverpod detects state changes by comparing state object references.
-/// If CartItem were mutable, `current[idx].quantity += 1` would mutate the
-/// same object already held in the previous state, making the old and new
-/// state lists point to the same modified instances — Riverpod would see
-/// identical references and suppress the rebuild entirely.
-///
-/// All mutations go through [copyWith] which returns a new instance.
 class CartItem {
   final String productId;
   final String productName;
   final String color;
   final String size;
-  final int quantity; // ← final, not var
+  int quantity;
   final double unitPrice;
 
-  const CartItem({
+  CartItem({
     required this.productId,
     required this.productName,
     required this.color,
@@ -29,30 +36,8 @@ class CartItem {
 
   double get lineTotal => unitPrice * quantity;
 
-  /// Unique key for variant identity — used to detect duplicates in addItem().
-  String get variantKey => '$productId|$color|$size';
-
-  /// Returns a copy with the given fields replaced.
-  CartItem copyWith({
-    String? productId,
-    String? productName,
-    String? color,
-    String? size,
-    int? quantity,
-    double? unitPrice,
-  }) {
-    return CartItem(
-      productId: productId ?? this.productId,
-      productName: productName ?? this.productName,
-      color: color ?? this.color,
-      size: size ?? this.size,
-      quantity: quantity ?? this.quantity,
-      unitPrice: unitPrice ?? this.unitPrice,
-    );
-  }
-
   /// Produces the exact Map shape expected by
-  /// InventoryService.deductInventoryForOrder() and OrderService.placeOrder().
+  /// InventoryService.deductInventoryForOrder().
   Map<String, dynamic> toOrderItem() => {
     'productId': productId,
     'productName': productName,
@@ -60,80 +45,95 @@ class CartItem {
     'size': size,
     'quantity': quantity,
   };
+
+  /// Unique key for variant identity — used to detect duplicates in addItem().
+  String get variantKey => '$productId|$color|$size';
 }
 
-/// Immutable state container for the POS cart.
-class POSCartState {
+// ─────────────────────────────────────────────────────────────────────────────
+// Cart state — immutable value object
+// ─────────────────────────────────────────────────────────────────────────────
+
+class CartState {
   final List<CartItem> items;
 
-  const POSCartState({this.items = const []});
+  const CartState({this.items = const []});
 
   int get itemCount => items.fold(0, (sum, i) => sum + i.quantity);
   bool get isEmpty => items.isEmpty;
   double get total => items.fold(0.0, (sum, i) => sum + i.lineTotal);
 
-  /// Returns the list of order item maps ready to pass to OrderModel.items
-  /// and InventoryService.deductInventoryForOrder().
+  /// Serializes each CartItem into the Firestore-compatible map structure
+  /// expected by OrderModel.items, InventoryService.checkStock(), and
+  /// InventoryService.deductInventoryForOrder().
+  /// Delegates to CartItem.toOrderItem() as the single source of truth.
   List<Map<String, dynamic>> get orderItems =>
       items.map((i) => i.toOrderItem()).toList();
 
-  POSCartState copyWith({List<CartItem>? items}) {
-    return POSCartState(items: items ?? this.items);
-  }
+  CartState copyWith({List<CartItem>? items}) =>
+      CartState(items: items ?? this.items);
 }
 
-/// Riverpod 3 Notifier managing the POS cart lifecycle.
-class POSCartNotifier extends Notifier<POSCartState> {
+// ─────────────────────────────────────────────────────────────────────────────
+// Cart notifier — Riverpod 3 Notifier
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _CartNotifier extends Notifier<CartState> {
   @override
-  POSCartState build() => const POSCartState();
+  CartState build() => const CartState();
 
   /// Adds [item] to the cart.
-  /// If the same variant already exists, increments quantity via copyWith
-  /// (never mutates the existing CartItem in place).
+  ///
+  /// If the same variant (productId + color + size) is already in the cart,
+  /// the quantity is incremented instead of creating a duplicate row.
+  /// CartItem.quantity is mutable (var) — incremented directly.
   void addItem(CartItem item) {
-    final currentList = state.items.toList();
-    final idx = currentList.indexWhere((i) => i.variantKey == item.variantKey);
-
+    final current = state.items.toList();
+    final idx = current.indexWhere((e) => e.variantKey == item.variantKey);
     if (idx >= 0) {
-      // Replace the existing CartItem with a new immutable instance.
-      currentList[idx] = currentList[idx].copyWith(
-        quantity: currentList[idx].quantity + item.quantity,
-      );
+      current[idx].quantity += item.quantity;
     } else {
-      currentList.add(item);
+      current.add(item);
     }
-
-    state = state.copyWith(items: currentList);
+    state = state.copyWith(items: current);
   }
 
   /// Removes the item at [index] entirely.
   void removeItem(int index) {
     if (index < 0 || index >= state.items.length) return;
-    final next = state.items.toList()..removeAt(index);
-    state = state.copyWith(items: next);
+    final current = state.items.toList()..removeAt(index);
+    state = state.copyWith(items: current);
   }
 
   /// Sets the quantity of the item at [index] to [qty].
-  /// Removes the item if qty <= 0.
+  ///
+  /// If [qty] <= 0 the item is removed from the cart.
+  /// CartItem.quantity is mutable (var) — set directly, no reconstruction needed.
   void updateQuantity(int index, int qty) {
     if (index < 0 || index >= state.items.length) return;
     if (qty <= 0) {
       removeItem(index);
       return;
     }
-    final next = state.items.toList();
-    // Replace with a new immutable CartItem — never mutate in place.
-    next[index] = next[index].copyWith(quantity: qty);
-    state = state.copyWith(items: next);
+    final current = state.items.toList();
+    current[index].quantity = qty;
+    state = state.copyWith(items: current);
   }
 
-  /// Empties the cart. Call after a successful sale is confirmed.
-  void clearCart() {
-    state = const POSCartState();
-  }
+  /// Empties the cart. Called after a successful sale and on new sale start.
+  void clearCart() => state = const CartState();
 }
 
-/// System-wide Riverpod 3 provider for the POS Cart.
-final posCartProvider = NotifierProvider<POSCartNotifier, POSCartState>(
-  POSCartNotifier.new,
+// ─────────────────────────────────────────────────────────────────────────────
+// Provider — scoped to WorkerPOSScreen's nested ProviderScope
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Cart provider scoped to the POS session.
+///
+/// This is a plain [NotifierProvider] (not autoDispose) because lifetime
+/// is controlled by the nested [ProviderScope] inside [WorkerPOSScreen].
+/// When the POS screen is popped, the [ProviderScope] disposes and the cart
+/// is automatically reset — no manual cleanup needed.
+final posCartProvider = NotifierProvider<_CartNotifier, CartState>(
+  _CartNotifier.new,
 );

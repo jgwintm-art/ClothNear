@@ -7,6 +7,7 @@ import '../services/auth_service.dart';
 import 'worker/worker_orders_screen.dart';
 import 'worker/worker_inventory_screen.dart';
 import 'worker/worker_pos_screen.dart';
+import 'worker/worker_sales_history_screen.dart';
 import 'shared/manage_payments_screen.dart';
 
 class WorkerHomeScreen extends StatefulWidget {
@@ -236,6 +237,25 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
                 storeId: store.storeId,
                 storeName: store.storeName,
                 workerUid: worker.uid,
+                workerName: worker.name,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Sales History — visible to workers who can use POS (their own transactions only)
+      menuItems.add(
+        _WorkerMenuItem(
+          icon: Icons.history_outlined,
+          label: 'My Sales',
+          color: Colors.indigo[700]!,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => WorkerSalesHistoryScreen(
+                workerUid: worker.uid,
+                storeId: store.storeId,
                 workerName: worker.name,
               ),
             ),

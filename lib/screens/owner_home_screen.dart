@@ -9,6 +9,7 @@ import 'owner/orders/view_orders_screen.dart';
 import 'owner/workers/manage_worker_screen.dart';
 import 'owner/pricing/manage_pricing_screen.dart';
 import 'owner/analytics/ai_analytics_dashboard_screen.dart';
+import 'owner/owner_sales_history_screen.dart';
 import 'shared/manage_payments_screen.dart';
 
 class OwnerHomeScreen extends StatelessWidget {
@@ -243,6 +244,23 @@ class OwnerHomeScreen extends StatelessWidget {
                       context,
                       MaterialPageRoute(
                         builder: (_) => const AiAnalyticsDashboardScreen(),
+                      ),
+                    ),
+                  ),
+                  _buildMenuItem(
+                    context,
+                    icon: Icons.history_outlined,
+                    title: 'Sales History',
+                    subtitle: 'All POS & online transactions',
+                    color: Colors.indigo,
+                    isActive: true,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => OwnerSalesHistoryScreen(
+                          storeId: store.storeId,
+                          storeName: store.storeName,
+                        ),
                       ),
                     ),
                   ),

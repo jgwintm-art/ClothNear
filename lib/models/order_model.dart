@@ -1,3 +1,17 @@
+// lib/models/order_model.dart
+//
+// CHANGES FROM ORIGINAL:
+//   • Added [orderSource]       — 'online' | 'pos'   (default: 'online' for BC)
+//   • Added [workerUid]         — uid of the worker who processed a POS sale
+//   • Added [workerName]        — denormalized display name (avoids join queries)
+//
+// All three are nullable/defaulted — every existing Firestore document that
+// lacks these keys will deserialize safely via the null-coalescing fallbacks
+// in fromMap().  No migration script required before deploying.
+//
+// toMap() only writes the fields when they are non-null, preserving the
+// existing behaviour of keeping online order documents clean.
+
 class OrderModel {
   final String orderId;
   final String customerUid;
@@ -8,7 +22,7 @@ class OrderModel {
   final double amountPaid;
   final double remainingBalance;
   final String paymentType; // 'full' | 'half'
-  final String orderType; // 'normal' | 'rush' | 'bulk'
+  final String orderType; // 'normal' | 'rush' | 'bulk' | 'walk_in'
   final String status;
   // 'pending_approval' | 'payment_pending' | 'processing' |
   // 'ready' | 'completed' | 'rejected' | 'cancelled'
@@ -18,38 +32,36 @@ class OrderModel {
   final String specialInstructions;
   final DateTime createdAt;
 
+  // ── NEW: Sales-history classification fields ─────────────────────────────────
+
+  /// Source of this order.
+  /// 'online' — placed by a customer through the app.
+  /// 'pos'    — walk-in sale processed by a worker at the POS terminal.
+  ///
+  /// Defaults to 'online' for all existing documents that pre-date this field.
+  /// The sales-history queries rely on this field + Firestore composite indexes.
+  final String orderSource; // 'online' | 'pos'
+
+  /// UID of the worker who processed this sale.
+  /// Set only when [orderSource] == 'pos'.  Always null for online orders.
+  final String? workerUid;
+
+  /// Display name of the worker at the time of the sale (denormalized).
+  /// Stored at write-time so the history list never needs a secondary lookup.
+  /// Set only when [orderSource] == 'pos'.
+  final String? workerName;
+
   // ── PayMongo fields (nullable — absent on in-person/legacy orders) ──────────
-  /// The PayMongo Link ID (e.g. "link_xxxx"). Used to poll payment status.
   final String? paymongoLinkId;
-
-  /// The hosted checkout URL the customer opens to pay.
   final String? paymongoCheckoutUrl;
-
-  /// Payment channel chosen by customer: 'gcash' | 'paymaya' | 'card' | null
   final String? paymentChannel;
-
-  /// PayMongo payment status: 'unpaid' | 'paid' | 'failed' | null
-  /// null = not an online payment (in-person order)
   final String? paymongoPaymentStatus;
 
   // ── Payment audit / tracking fields ─────────────────────────────────────────
-
-  /// ISO timestamp (ms epoch) when payment was confirmed (auto or manual).
   final int? paymentConfirmedAt;
-
-  /// UID or display name of the staff member who confirmed a manual payment.
-  /// 'system' for auto-confirmed PayMongo payments.
   final String? paymentConfirmedBy;
-
-  /// Human-readable method: 'gcash' | 'paymaya' | 'card' | 'cash' | 'partial_cash'
-  /// Distinct from [paymentChannel] (which is the PayMongo channel enum).
   final String? paymentMethod;
-
-  /// PayMongo payment object ID (e.g. 'pay_xxxx') returned by the webhook/poll.
-  /// Immutable once set — provides a permanent audit reference.
   final String? paymongoPaymentId;
-
-  /// Optional note added by staff when confirming a manual/cash payment.
   final String? paymentNote;
 
   OrderModel({
@@ -69,7 +81,11 @@ class OrderModel {
     this.designName = '',
     this.specialInstructions = '',
     required this.createdAt,
-    // PayMongo — all optional, null-safe
+    // NEW — default 'online' keeps all call sites that omit this field valid.
+    this.orderSource = 'online',
+    this.workerUid,
+    this.workerName,
+    // PayMongo
     this.paymongoLinkId,
     this.paymongoCheckoutUrl,
     this.paymentChannel,
@@ -106,7 +122,11 @@ class OrderModel {
                 ? map['createdAt'] as DateTime
                 : (map['createdAt'] as dynamic).toDate()
           : DateTime.now(),
-      // PayMongo — gracefully null on existing documents
+      // NEW — null-coalesce to 'online' so every legacy document is safe.
+      orderSource: map['orderSource'] as String? ?? 'online',
+      workerUid: map['workerUid'] as String?,
+      workerName: map['workerName'] as String?,
+      // PayMongo
       paymongoLinkId: map['paymongoLinkId'] as String?,
       paymongoCheckoutUrl: map['paymongoCheckoutUrl'] as String?,
       paymentChannel: map['paymentChannel'] as String?,
@@ -137,9 +157,15 @@ class OrderModel {
       'designName': designName,
       'specialInstructions': specialInstructions,
       'createdAt': createdAt.millisecondsSinceEpoch,
+      // NEW — always written so the Firestore index can use this field.
+      'orderSource': orderSource,
     };
-    // Only write PayMongo fields when they have values — keeps existing
-    // in-person order documents clean.
+
+    // POS worker fields — only write for POS orders to keep online docs clean.
+    if (workerUid != null) m['workerUid'] = workerUid;
+    if (workerName != null) m['workerName'] = workerName;
+
+    // PayMongo fields
     if (paymongoLinkId != null) m['paymongoLinkId'] = paymongoLinkId;
     if (paymongoCheckoutUrl != null) {
       m['paymongoCheckoutUrl'] = paymongoCheckoutUrl;
@@ -148,7 +174,8 @@ class OrderModel {
     if (paymongoPaymentStatus != null) {
       m['paymongoPaymentStatus'] = paymongoPaymentStatus;
     }
-    // Payment audit fields — only write when present
+
+    // Payment audit fields
     if (paymentConfirmedAt != null) {
       m['paymentConfirmedAt'] = paymentConfirmedAt;
     }
@@ -158,6 +185,7 @@ class OrderModel {
     if (paymentMethod != null) m['paymentMethod'] = paymentMethod;
     if (paymongoPaymentId != null) m['paymongoPaymentId'] = paymongoPaymentId;
     if (paymentNote != null) m['paymentNote'] = paymentNote;
+
     return m;
   }
 
@@ -165,6 +193,9 @@ class OrderModel {
     String? status,
     double? amountPaid,
     double? remainingBalance,
+    String? orderSource,
+    String? workerUid,
+    String? workerName,
     String? paymongoLinkId,
     String? paymongoCheckoutUrl,
     String? paymentChannel,
@@ -192,6 +223,9 @@ class OrderModel {
       designName: designName,
       specialInstructions: specialInstructions,
       createdAt: createdAt,
+      orderSource: orderSource ?? this.orderSource,
+      workerUid: workerUid ?? this.workerUid,
+      workerName: workerName ?? this.workerName,
       paymongoLinkId: paymongoLinkId ?? this.paymongoLinkId,
       paymongoCheckoutUrl: paymongoCheckoutUrl ?? this.paymongoCheckoutUrl,
       paymentChannel: paymentChannel ?? this.paymentChannel,
@@ -206,6 +240,12 @@ class OrderModel {
   }
 
   // ── Display helpers ──────────────────────────────────────────────────────────
+
+  /// True when this order was processed at a POS terminal by a worker.
+  bool get isPosOrder => orderSource == 'pos';
+
+  /// True when this is a customer-placed online order.
+  bool get isOnlineOrder => orderSource == 'online';
 
   String get statusDisplay {
     switch (status) {
@@ -251,7 +291,6 @@ class OrderModel {
   bool get isPaymentConfirmed =>
       isOnlinePayment ? paymongoPaymentStatus == 'paid' : remainingBalance <= 0;
 
-  /// Resolved payment method label for display in dashboards.
   String get paymentMethodDisplay {
     if (paymentMethod != null) {
       switch (paymentMethod) {
@@ -267,13 +306,10 @@ class OrderModel {
           return 'Cash (Partial)';
       }
     }
-    // Fallback: derive from paymentChannel / isOnlinePayment
     if (isOnlinePayment) return paymentChannelDisplay;
     return 'In-Person / Cash';
   }
 
-  /// Derived payment status for owner/worker dashboards.
-  /// More granular than [paymongoPaymentStatus].
   String get resolvedPaymentStatus {
     if (status == 'payment_pending') return 'pending_online';
     if (status == 'cancelled' || status == 'rejected') return 'void';
