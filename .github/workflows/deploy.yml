@@ -51,6 +51,7 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PAYMONGO_FUNCTIONS_BASE: ${{ secrets.PAYMONGO_FUNCTIONS_BASE }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
         run: |
           flutter build web --release \
             --pwa-strategy=none \
@@ -58,7 +59,7 @@ jobs:
             --dart-define=GEMINI_MODEL=gemini-2.5-flash \
             --dart-define=PAYMONGO_ENABLED=true \
             --dart-define=PAYMONGO_FUNCTIONS_BASE="$PAYMONGO_FUNCTIONS_BASE" \
-            --dart-define=CLOUDINARY_CLOUD_NAME=dj308cqxd
+            --dart-define=CLOUDINARY_CLOUD_NAME="$CLOUDINARY_CLOUD_NAME"
 
       - name: Install Firebase CLI
         run: npm install -g firebase-tools@15.18.0
