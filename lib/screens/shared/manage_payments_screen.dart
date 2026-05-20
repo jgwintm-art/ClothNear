@@ -131,6 +131,11 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
         amountReceived: amountReceived,
         confirmedByUid: uid,
         confirmedByName: confirmerName,
+        customerUid: order.customerUid,
+        cartItemIds: order.items
+            .map((item) => item['cartItemId'] as String)
+            .where((id) => id.isNotEmpty)
+            .toList(),
         note: noteController.text.trim(),
       );
 

@@ -48,6 +48,7 @@ class CartItemModel {
 
   Map<String, dynamic> toMap() {
     return {
+      'cartItemId': cartItemId, // Add cartItemId to the map
       'productId': productId,
       'storeId': storeId,
       'productName': productName,

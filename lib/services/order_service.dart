@@ -12,10 +12,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/order_model.dart';
 import 'inventory_service.dart';
+import 'cart_service.dart';
 
 class OrderService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final InventoryService _inventoryService = InventoryService();
+  final CartService _cartService = CartService();
 
   // ── Original: Order placement (online orders) ──────────────────────────────
 
@@ -37,6 +39,15 @@ class OrderService {
         orderId: orderId,
         orderItems: order.items,
       );
+      // Remove purchased items from the customer's cart for in-person orders
+      final customerUid = order.customerUid;
+      final cartItemIds = order.items
+          .map((item) => item['cartItemId'] as String)
+          .where((id) => id.isNotEmpty)
+          .toList();
+      if (customerUid.isNotEmpty && cartItemIds.isNotEmpty) {
+        await _cartService.removeItemsFromCart(customerUid, cartItemIds);
+      }
     }
 
     return orderId;
@@ -379,6 +390,8 @@ class OrderService {
     required double amountReceived,
     required String confirmedByUid,
     required String confirmedByName,
+    required String customerUid,
+    required List<String> cartItemIds,
     String note = '',
   }) async {
     final remaining = (totalPrice - amountReceived).clamp(0.0, totalPrice);
@@ -412,6 +425,10 @@ class OrderService {
           'timestamp': now,
           'source': 'manual',
         });
+    // Remove purchased items from the customer's cart if the payment is full
+    if (remaining <= 0 && customerUid.isNotEmpty && cartItemIds.isNotEmpty) {
+      await _cartService.removeItemsFromCart(customerUid, cartItemIds);
+    }
   }
 
   Future<void> confirmOnlinePayment({
@@ -420,10 +437,18 @@ class OrderService {
     required double totalPrice,
     required String paymentChannel,
     required List<Map<String, dynamic>> orderItems,
+    required List<String> cartItemIds, // New parameter
     String paymongoPaymentId = '',
   }) async {
     final remaining = (totalPrice - amountPaid).clamp(0.0, totalPrice);
     final now = DateTime.now().millisecondsSinceEpoch;
+
+    // Get customerUid from the order to correctly remove cart items
+    final orderDoc = await _firestore.collection('orders').doc(orderId).get();
+    final customerUid = orderDoc.data()?['customerUid'] as String? ?? '';
+    if (customerUid.isEmpty) {
+      throw Exception('Could not retrieve customer UID for order $orderId');
+    }
 
     final Map<String, dynamic> update = {
       'status': 'processing',
@@ -444,6 +469,9 @@ class OrderService {
       orderId: orderId,
       orderItems: orderItems,
     );
+
+    // Remove purchased items from the customer's cart
+    await _cartService.removeItemsFromCart(customerUid, cartItemIds);
 
     await _firestore
         .collection('orders')

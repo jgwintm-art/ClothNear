@@ -160,7 +160,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       );
 
       await _orderService.placeOrder(order);
-      await _cartService.clearCart(uid);
+      // For in-person orders, remove items from the cart immediately.
+      await _cartService.removeItemsFromCart(
+        uid,
+        widget.items.map((e) => e.cartItemId).toList(),
+      );
 
       if (!mounted) return;
       Navigator.pushAndRemoveUntil(
@@ -246,7 +250,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       );
 
       final orderId = await _orderService.placeOrder(order);
-      await _cartService.clearCart(uid);
 
       // 3. Open PayMongo checkout in browser
       final checkoutUri = Uri.parse(link.checkoutUrl);

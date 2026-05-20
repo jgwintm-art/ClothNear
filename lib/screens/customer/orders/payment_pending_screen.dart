@@ -103,6 +103,10 @@ class _PaymentPendingScreenState extends State<PaymentPendingScreen> {
         totalPrice: widget.totalAmount,
         paymentChannel: widget.paymentChannel,
         orderItems: widget.orderItems,
+        cartItemIds: widget.orderItems
+            .map((item) => item['cartItemId'] as String)
+            .where((id) => id.isNotEmpty)
+            .toList(),
       );
 
       if (!mounted) return;
