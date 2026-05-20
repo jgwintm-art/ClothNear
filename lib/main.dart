@@ -8,12 +8,13 @@ import 'screens/worker_home_screen.dart';
 import 'models/user_model.dart';
 import 'screens/force_password_change_screen.dart';
 import 'config/env_config.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await EnvConfig.load();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  runApp(const MyApp());
+  runApp(const ProviderScope(child: MyApp()));
 }
 
 class MyApp extends StatelessWidget {
