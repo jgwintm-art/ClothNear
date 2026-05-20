@@ -318,13 +318,12 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
                       key: 'canViewInventory',
                       icon: Icons.inventory_2_outlined,
                     ),
-                    // ── NEW: POS Sales permission ──────────────────────────
                     const Divider(height: 8),
                     _buildPermissionTile(
                       label: 'Process Walk-in Sales (POS)',
                       subtitle:
                           'Create walk-in orders and accept cash payments at point of sale',
-                      key: 'canProcessSales',
+                      key: 'canUsePOS', // ← was 'canProcessSales'
                       icon: Icons.point_of_sale_rounded,
                       activeColor: Colors.purple[700],
                     ),
