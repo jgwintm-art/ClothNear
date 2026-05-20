@@ -1,3 +1,4 @@
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 import '../../models/store_model.dart';
 import '../../models/product_model.dart';
@@ -114,14 +115,16 @@ class StoreDetailsScreen extends StatelessWidget {
                       store.tiktokUrl.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 20),
-                      child: Row(
+                      child: Wrap(
+                        spacing: 16,
+                        runSpacing: 16,
                         children: [
                           if (store.facebookUrl.isNotEmpty)
-                            _buildSocialIcon(Icons.facebook, store.facebookUrl),
+                            _buildSocialIcon(Icons.facebook, 'Facebook', store.facebookUrl),
                           if (store.instagramUrl.isNotEmpty)
-                            _buildSocialIcon(Icons.camera_alt, store.instagramUrl),
+                            _buildSocialIcon(Icons.camera_alt, 'Instagram', store.instagramUrl),
                           if (store.tiktokUrl.isNotEmpty)
-                            _buildSocialIcon(Icons.video_library, store.tiktokUrl),
+                            _buildSocialIcon(Icons.video_library, 'TikTok', store.tiktokUrl),
                         ],
                       ),
                     ),
@@ -185,14 +188,23 @@ class StoreDetailsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSocialIcon(IconData icon, String url) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 16),
-      child: GestureDetector(
-        onTap: () async {
-          // Placeholder for launchUrl logic
-        },
-        child: Icon(icon, size: 24, color: Colors.blue[700]),
+  Widget _buildSocialIcon(IconData icon, String label, String url) {
+    return GestureDetector(
+      onTap: () async {
+        final uri = Uri.parse(url);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+      },
+      child: Column(
+        children: [
+          Icon(icon, size: 28, color: Colors.blue[700]),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(fontSize: 11, color: Colors.grey[700]),
+          ),
+        ],
       ),
     );
   }
