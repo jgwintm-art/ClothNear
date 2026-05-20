@@ -9,70 +9,7 @@ import 'package:clothnear/services/product_service.dart';
 import 'package:clothnear/services/worker_pos_cart_provider.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Cart state + Riverpod 3 Notifier (replaces ChangeNotifier-based provider)
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _CartState {
-  final List<CartItem> items;
-  const _CartState({this.items = const []});
-
-  int get itemCount => items.fold(0, (sum, i) => sum + i.quantity);
-  bool get isEmpty => items.isEmpty;
-  double get total => items.fold(0.0, (sum, i) => sum + i.lineTotal);
-
-  /// Delegates directly to CartItem.toOrderItem() — the single source of
-  /// truth for the map shape expected by OrderModel.items and
-  /// InventoryService.deductInventoryForOrder().
-  List<Map<String, dynamic>> get orderItems =>
-      items.map((i) => i.toOrderItem()).toList();
-
-  _CartState copyWith({List<CartItem>? items}) =>
-      _CartState(items: items ?? this.items);
-}
-
-class _CartNotifier extends Notifier<_CartState> {
-  @override
-  _CartState build() => const _CartState();
-
-  void addItem(CartItem item) {
-    final current = state.items.toList();
-    final idx = current.indexWhere((e) => e.variantKey == item.variantKey);
-    if (idx >= 0) {
-      // CartItem.quantity is mutable (var) — increment directly.
-      current[idx].quantity += item.quantity;
-    } else {
-      current.add(item);
-    }
-    state = state.copyWith(items: current);
-  }
-
-  void removeItem(int index) {
-    if (index < 0 || index >= state.items.length) return;
-    final current = state.items.toList()..removeAt(index);
-    state = state.copyWith(items: current);
-  }
-
-  void updateQuantity(int index, int qty) {
-    if (index < 0 || index >= state.items.length) return;
-    if (qty <= 0) {
-      removeItem(index);
-      return;
-    }
-    // CartItem.quantity is mutable (var) — set directly, no reconstruction needed.
-    final current = state.items.toList();
-    current[index].quantity = qty;
-    state = state.copyWith(items: current);
-  }
-
-  void clearCart() => state = const _CartState();
-}
-
-final posCartProvider = NotifierProvider<_CartNotifier, _CartState>(
-  _CartNotifier.new,
-);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Entry point — provide the cart and host the 3-step PageView
+// Entry point — host the 3-step PageView
 // ─────────────────────────────────────────────────────────────────────────────
 
 class WorkerPOSScreen extends StatelessWidget {
@@ -101,8 +38,7 @@ class WorkerPOSScreen extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Internal navigator — manages the 3 steps without a PageView so back-nav
-// works correctly on Android and the AppBar cart badge stays mounted.
+// Internal navigator — manages the 3 steps via IndexedStack
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _POSNavigator extends ConsumerStatefulWidget {
@@ -129,7 +65,7 @@ class _POSNavigatorState extends ConsumerState<_POSNavigator> {
 
   @override
   Widget build(BuildContext context) {
-    final cart = ref.watch(posCartProvider);
+    final cartState = ref.watch(posCartProvider);
 
     return PopScope(
       canPop: _step == 0,
@@ -163,9 +99,9 @@ class _POSNavigatorState extends ConsumerState<_POSNavigator> {
                 children: [
                   IconButton(
                     icon: const Icon(Icons.shopping_cart_outlined),
-                    onPressed: cart.isEmpty ? null : () => _goTo(1),
+                    onPressed: cartState.isEmpty ? null : () => _goTo(1),
                   ),
-                  if (cart.itemCount > 0)
+                  if (cartState.itemCount > 0)
                     Positioned(
                       right: 6,
                       top: 6,
@@ -176,7 +112,7 @@ class _POSNavigatorState extends ConsumerState<_POSNavigator> {
                           shape: BoxShape.circle,
                         ),
                         child: Text(
-                          '${cart.itemCount}',
+                          '${cartState.itemCount}',
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
@@ -187,7 +123,6 @@ class _POSNavigatorState extends ConsumerState<_POSNavigator> {
                     ),
                 ],
               ),
-            // Step indicator dots
             Padding(
               padding: const EdgeInsets.only(right: 16),
               child: Row(
@@ -257,7 +192,6 @@ class _ProductBrowserStepState extends State<_ProductBrowserStep> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Search bar
         Container(
           color: Colors.purple[700],
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -297,8 +231,6 @@ class _ProductBrowserStepState extends State<_ProductBrowserStep> {
             ),
           ),
         ),
-
-        // Product grid
         Expanded(
           child: StreamBuilder<List<ProductModel>>(
             stream: ProductService().getProductsByStore(widget.storeId),
@@ -367,16 +299,13 @@ class _ProductCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final cartNotifier = ref.read(posCartProvider.notifier);
-
-    // Count total stock across all variants
     final totalStock = product.variants.values.fold<int>(
       0,
       (sum, v) => sum + v.stock,
     );
 
     return GestureDetector(
-      onTap: () => _showVariantSheet(context, product, cartNotifier),
+      onTap: () => _showVariantSheet(context, product, ref),
       child: Card(
         elevation: 0,
         shape: RoundedRectangleBorder(
@@ -388,7 +317,6 @@ class _ProductCard extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Product icon placeholder
               Container(
                 height: 80,
                 decoration: BoxDecoration(
@@ -462,7 +390,7 @@ class _ProductCard extends ConsumerWidget {
   void _showVariantSheet(
     BuildContext context,
     ProductModel product,
-    _CartNotifier cart,
+    WidgetRef ref,
   ) {
     showModalBottomSheet(
       context: context,
@@ -473,7 +401,7 @@ class _ProductCard extends ConsumerWidget {
       builder: (_) => _VariantSelectorSheet(
         product: product,
         onAddToCart: (item) {
-          cart.addItem(item);
+          ref.read(posCartProvider.notifier).addItem(item);
           Navigator.pop(context);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -544,7 +472,6 @@ class _VariantSelectorSheetState extends State<_VariantSelectorSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Handle
             Center(
               child: Container(
                 width: 40,
@@ -569,8 +496,6 @@ class _VariantSelectorSheetState extends State<_VariantSelectorSheet> {
               ),
             ),
             const SizedBox(height: 20),
-
-            // Color selector
             const Text(
               'Color',
               style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
@@ -597,8 +522,6 @@ class _VariantSelectorSheetState extends State<_VariantSelectorSheet> {
               }).toList(),
             ),
             const SizedBox(height: 16),
-
-            // Size selector
             const Text(
               'Size',
               style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
@@ -631,8 +554,6 @@ class _VariantSelectorSheetState extends State<_VariantSelectorSheet> {
               }).toList(),
             ),
             const SizedBox(height: 16),
-
-            // Quantity stepper
             Row(
               children: [
                 const Text(
@@ -669,8 +590,6 @@ class _VariantSelectorSheetState extends State<_VariantSelectorSheet> {
               ],
             ),
             const SizedBox(height: 20),
-
-            // Add to cart button
             SizedBox(
               width: double.infinity,
               height: 50,
@@ -722,9 +641,9 @@ class _CartReviewStep extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final cart = ref.watch(posCartProvider);
+    final cartState = ref.watch(posCartProvider);
 
-    if (cart.isEmpty) {
+    if (cartState.isEmpty) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -759,10 +678,10 @@ class _CartReviewStep extends ConsumerWidget {
         Expanded(
           child: ListView.separated(
             padding: const EdgeInsets.all(16),
-            itemCount: cart.items.length,
+            itemCount: cartState.items.length,
             separatorBuilder: (_, _) => const SizedBox(height: 10),
             itemBuilder: (ctx, i) {
-              final item = cart.items[i];
+              final item = cartState.items[i];
               return Card(
                 elevation: 0,
                 shape: RoundedRectangleBorder(
@@ -773,7 +692,6 @@ class _CartReviewStep extends ConsumerWidget {
                   padding: const EdgeInsets.all(14),
                   child: Row(
                     children: [
-                      // Product icon
                       Container(
                         width: 48,
                         height: 48,
@@ -787,7 +705,6 @@ class _CartReviewStep extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      // Details
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -817,7 +734,6 @@ class _CartReviewStep extends ConsumerWidget {
                           ],
                         ),
                       ),
-                      // Qty stepper
                       Row(
                         children: [
                           IconButton(
@@ -851,7 +767,6 @@ class _CartReviewStep extends ConsumerWidget {
                           ),
                         ],
                       ),
-                      // Line total + delete
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
@@ -887,8 +802,6 @@ class _CartReviewStep extends ConsumerWidget {
             },
           ),
         ),
-
-        // Footer
         Container(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
           decoration: BoxDecoration(
@@ -908,11 +821,11 @@ class _CartReviewStep extends ConsumerWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '${cart.itemCount} item(s)',
+                    '${cartState.itemCount} item(s)',
                     style: TextStyle(color: Colors.grey[600]),
                   ),
                   Text(
-                    'Total: ₱${cart.total.toStringAsFixed(2)}',
+                    'Total: ₱${cartState.total.toStringAsFixed(2)}',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -975,7 +888,6 @@ class _PaymentStepState extends ConsumerState<_PaymentStep> {
   final _tenderedCtrl = TextEditingController();
   bool _isProcessing = false;
   String? _error;
-
   double _tendered = 0.0;
 
   @override
@@ -985,13 +897,13 @@ class _PaymentStepState extends ConsumerState<_PaymentStep> {
   }
 
   double get _change {
-    final cart = ref.read(posCartProvider);
-    return (_tendered - cart.total).clamp(0.0, double.infinity);
+    final cartState = ref.read(posCartProvider);
+    return (_tendered - cartState.total).clamp(0.0, double.infinity);
   }
 
   bool get _canComplete {
-    final cart = ref.read(posCartProvider);
-    return _tendered >= cart.total && !_isProcessing;
+    final cartState = ref.read(posCartProvider);
+    return _tendered >= cartState.total && !_isProcessing;
   }
 
   Future<void> _completeSale() async {
@@ -1000,14 +912,12 @@ class _PaymentStepState extends ConsumerState<_PaymentStep> {
       _error = null;
     });
 
-    final cart = ref.read(posCartProvider);
-    final cartNotifier = ref.read(posCartProvider.notifier);
+    final cartState = ref.read(posCartProvider);
 
     try {
-      // 1. Pre-flight stock check
-      // StockCheckResult.isOk == true means all variants have sufficient stock.
-      // On failure, StockError.userMessage gives a human-readable breakdown.
-      final stockResult = await InventoryService().checkStock(cart.orderItems);
+      final stockResult = await InventoryService().checkStock(
+        cartState.orderItems,
+      );
       if (!stockResult.isOk) {
         setState(() {
           _error = stockResult.errors.map((e) => e.userMessage).join('\n');
@@ -1016,15 +926,14 @@ class _PaymentStepState extends ConsumerState<_PaymentStep> {
         return;
       }
 
-      // 2. Build OrderModel
       final order = OrderModel(
         orderId: '',
         customerUid: 'walk_in',
         storeId: widget.storeId,
         storeName: widget.storeName,
-        items: cart.orderItems,
-        totalPrice: cart.total,
-        amountPaid: cart.total,
+        items: cartState.orderItems,
+        totalPrice: cartState.total,
+        amountPaid: cartState.total,
         remainingBalance: 0.0,
         paymentType: 'full',
         orderType: 'walk_in',
@@ -1036,11 +945,10 @@ class _PaymentStepState extends ConsumerState<_PaymentStep> {
         paymentConfirmedBy: widget.workerName,
       );
 
-      // 3. Place order — deducts inventory automatically (status == 'processing')
       final orderId = await OrderService().placeOrder(order);
 
-      // 4. Clear cart and navigate to success screen
-      cartNotifier.clearCart();
+      // Access notifier lifecycle cleanly
+      ref.read(posCartProvider.notifier).clearCart();
 
       if (!mounted) return;
       Navigator.pushReplacement(
@@ -1071,15 +979,14 @@ class _PaymentStepState extends ConsumerState<_PaymentStep> {
 
   @override
   Widget build(BuildContext context) {
-    final cart = ref.watch(posCartProvider);
-    final total = cart.total;
+    final cartState = ref.watch(posCartProvider);
+    final total = cartState.total;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Order summary card
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
@@ -1100,7 +1007,7 @@ class _PaymentStepState extends ConsumerState<_PaymentStep> {
                     ),
                   ),
                   const Divider(height: 20),
-                  ...cart.items.map(
+                  ...cartState.items.map(
                     (item) => Padding(
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       child: Row(
@@ -1148,8 +1055,6 @@ class _PaymentStepState extends ConsumerState<_PaymentStep> {
             ),
           ),
           const SizedBox(height: 20),
-
-          // Cash tendered input
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
@@ -1277,8 +1182,6 @@ class _PaymentStepState extends ConsumerState<_PaymentStep> {
             ),
           ),
           const SizedBox(height: 12),
-
-          // Error display
           if (_error != null)
             Container(
               padding: const EdgeInsets.all(14),
@@ -1301,8 +1204,6 @@ class _PaymentStepState extends ConsumerState<_PaymentStep> {
                 ],
               ),
             ),
-
-          // Complete sale button
           SizedBox(
             height: 54,
             child: ElevatedButton.icon(
@@ -1390,8 +1291,6 @@ class _POSSaleSuccessScreen extends StatelessWidget {
                 style: TextStyle(color: Colors.grey[600]),
               ),
               const SizedBox(height: 32),
-
-              // Transaction summary
               Card(
                 elevation: 0,
                 shape: RoundedRectangleBorder(
@@ -1436,17 +1335,14 @@ class _POSSaleSuccessScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 32),
-
-              // Action buttons
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () {
-                        // Pop back to WorkerHomeScreen
                         Navigator.of(context)
-                          ..pop() // success screen
-                          ..pop(); // POS screen
+                          ..pop()
+                          ..pop();
                       },
                       icon: const Icon(Icons.home_outlined),
                       label: const Text('Done'),
@@ -1462,7 +1358,6 @@ class _POSSaleSuccessScreen extends StatelessWidget {
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () {
-                        // Pop just the success screen — POS resets
                         Navigator.pop(context);
                       },
                       icon: const Icon(Icons.add_shopping_cart),

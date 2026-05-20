@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Represents a single item in the POS cart.
 class CartItem {
@@ -34,73 +34,73 @@ class CartItem {
   String get variantKey => '$productId|$color|$size';
 }
 
-/// Lightweight ChangeNotifier that holds the POS cart state for one transaction.
-///
-/// Lifecycle:
-///   - Provide at WorkerPOSScreen level (not app-level) so the cart is
-///     automatically disposed when the POS screen is popped.
-///   - clearCart() is called after a successful sale before navigating away.
-class POSCartProvider extends ChangeNotifier {
-  final List<CartItem> _items = [];
+/// Immutable state container for the POS cart in Riverpod 3.
+class POSCartState {
+  final List<CartItem> items;
 
-  // ── Read-only accessors ────────────────────────────────────────────────────
+  const POSCartState({this.items = const []});
 
-  List<CartItem> get items => List.unmodifiable(_items);
-
-  /// Running total across all line items.
-  double get total => _items.fold(0.0, (sum, i) => sum + i.lineTotal);
-
-  /// Total individual units in the cart (not distinct products).
-  int get itemCount => _items.fold(0, (sum, i) => sum + i.quantity);
-
-  bool get isEmpty => _items.isEmpty;
-
-  // ── Mutation methods ───────────────────────────────────────────────────────
-
-  /// Adds [item] to the cart.
-  ///
-  /// If the same variant (productId + color + size) is already in the cart,
-  /// the quantity is incremented instead of creating a duplicate row.
-  void addItem(CartItem item) {
-    final existing = _items.indexWhere((i) => i.variantKey == item.variantKey);
-    if (existing >= 0) {
-      _items[existing].quantity += item.quantity;
-    } else {
-      _items.add(item);
-    }
-    notifyListeners();
-  }
-
-  /// Removes the item at [index] entirely.
-  void removeItem(int index) {
-    if (index < 0 || index >= _items.length) return;
-    _items.removeAt(index);
-    notifyListeners();
-  }
-
-  /// Sets the quantity of the item at [index] to [qty].
-  ///
-  /// If [qty] <= 0 the item is removed from the cart.
-  void updateQuantity(int index, int qty) {
-    if (index < 0 || index >= _items.length) return;
-    if (qty <= 0) {
-      _items.removeAt(index);
-    } else {
-      _items[index].quantity = qty;
-    }
-    notifyListeners();
-  }
-
-  /// Empties the cart. Call after a successful sale is confirmed.
-  void clearCart() {
-    _items.clear();
-    notifyListeners();
-  }
-
-  // ── Helpers for order creation ─────────────────────────────────────────────
+  int get itemCount => items.fold(0, (sum, i) => sum + i.quantity);
+  bool get isEmpty => items.isEmpty;
+  double get total => items.fold(0.0, (sum, i) => sum + i.lineTotal);
 
   /// Returns the list of order item maps ready to pass to OrderModel.items
   /// and InventoryService.deductInventoryForOrder().
   List<Map<String, dynamic>> get orderItems =>
-      _items.map((i) => i.toOrderItem()).toList();
+      items.map((i) => i.toOrderItem()).toList();
+
+  POSCartState copyWith({List<CartItem>? items}) {
+    return POSCartState(items: items ?? this.items);
+  }
 }
+
+/// Riverpod 3 Notifier managing the POS cart lifecycle.
+class POSCartNotifier extends Notifier<POSCartState> {
+  @override
+  POSCartState build() => const POSCartState();
+
+  /// Adds [item] to the cart.
+  void addItem(CartItem item) {
+    final currentList = state.items.toList();
+    final existingIndex = currentList.indexWhere(
+      (i) => i.variantKey == item.variantKey,
+    );
+
+    if (existingIndex >= 0) {
+      currentList[existingIndex].quantity += item.quantity;
+    } else {
+      currentList.add(item);
+    }
+
+    state = state.copyWith(items: currentList);
+  }
+
+  /// Removes the item at [index] entirely.
+  void removeItem(int index) {
+    if (index < 0 || index >= state.items.length) return;
+    final currentList = state.items.toList()..removeAt(index);
+    state = state.copyWith(items: currentList);
+  }
+
+  /// Sets the quantity of the item at [index] to [qty].
+  void updateQuantity(int index, int qty) {
+    if (index < 0 || index >= state.items.length) return;
+    if (qty <= 0) {
+      removeItem(index);
+    } else {
+      final currentList = state.items.toList();
+      currentList[index].quantity = qty;
+      state = state.copyWith(items: currentList);
+    }
+  }
+
+  /// Empties the cart. Call after a successful sale is confirmed.
+  void clearCart() {
+    state = const POSCartState();
+  }
+}
+
+/// System-wide Riverpod 3 provider for the POS Cart.
+final posCartProvider = NotifierProvider<POSCartNotifier, POSCartState>(
+  POSCartNotifier.new,
+);
