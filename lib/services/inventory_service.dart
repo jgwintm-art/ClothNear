@@ -1,55 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/product_model.dart';
 
-/// Handles all inventory mutation operations.
-///
-/// Design principles (follows standard e-commerce practices):
-///
-/// 1. ATOMIC — every deduction runs inside a Firestore transaction so that
-///    concurrent orders cannot both decrement the same stock and cause
-///    negative inventory (overselling).
-///
-/// 2. IDEMPOTENT — before deducting, the service checks whether this
-///    [orderId] has already been recorded in the product's
-///    `deductedOrders` map. If it has, the deduction is skipped.
-///    This guarantees that retrying a failed network call, or calling
-///    deductInventoryForOrder() from both the checkout screen and the
-///    approval screen, will never double-deduct.
-///
-/// 3. OVERSELL-SAFE — if any variant has insufficient stock the entire
-///    batch is aborted and an [InsufficientStockException] is thrown.
-///    The caller (checkout / approval) should surface this to the user.
-///
-/// 4. VARIANT-KEYED — keys follow ProductModel.variantKey(color, size)
-///    i.e. "${color.toLowerCase()}_${size.toLowerCase()}".
-///
-/// Firestore paths written:
-///   products/{productId}
-///     variants.{variantKey}.stock          — decremented atomically
-///     deductedOrders.{orderId}             — idempotency marker (ms epoch)
 class InventoryService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  // ── Public API ─────────────────────────────────────────────────────────────
-
-  /// Deducts inventory for all items in [orderItems] atomically.
-  ///
-  /// [orderItems] — the `items` list stored on the Firestore order document.
-  ///   Each item must contain: productId, color, size, quantity (int).
-  ///
-  /// [orderId] — used for idempotency. Calling this multiple times with the
-  ///   same orderId is safe; subsequent calls are no-ops per product.
-  ///
-  /// Throws [InsufficientStockException] if ANY item has insufficient stock.
-  /// In that case NO inventory is changed (the transaction aborts entirely
-  /// per-product; products already processed are not rolled back — see note
-  /// below about batch ordering).
-  ///
-  /// NOTE: We run one transaction per unique productId rather than one giant
-  /// transaction across all products. Firestore transactions are limited to
-  /// 500 documents and cross-shard transactions add latency. For typical
-  /// orders (1–5 products) this is perfectly safe. We check oversell for
-  /// ALL products before writing any, so the user gets a full error list.
   Future<void> deductInventoryForOrder({
     required String orderId,
     required List<Map<String, dynamic>> orderItems,
