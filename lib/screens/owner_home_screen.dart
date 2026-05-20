@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../services/store_service.dart';
 
 import 'owner/register_store_screen.dart';
+import 'owner/edit_shop_screen.dart';
 import 'owner/inventory/manage_inventory_screen.dart';
 import 'owner/orders/view_orders_screen.dart';
 import 'owner/workers/manage_worker_screen.dart';
@@ -159,6 +160,20 @@ class OwnerHomeScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
+                  _buildMenuItem(
+                    context,
+                    icon: Icons.edit_note_outlined,
+                    title: 'Edit Shop Details',
+                    subtitle: 'Update shop info and social links',
+                    color: Colors.blue,
+                    isActive: true,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => EditShopScreen(store: store),
+                      ),
+                    ),
+                  ),
                   _buildMenuItem(
                     context,
                     icon: Icons.inventory_2_outlined,

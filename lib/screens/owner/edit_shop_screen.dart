@@ -1,28 +1,55 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/store_model.dart';
 import '../../services/store_service.dart';
 
-class RegisterStoreScreen extends StatefulWidget {
-  const RegisterStoreScreen({super.key});
+class EditShopScreen extends StatefulWidget {
+  final StoreModel store;
+
+  const EditShopScreen({super.key, required this.store});
 
   @override
-  State<RegisterStoreScreen> createState() => _RegisterStoreScreenState();
+  State<EditShopScreen> createState() => _EditShopScreenState();
 }
 
-class _RegisterStoreScreenState extends State<RegisterStoreScreen> {
-  final _storeNameController = TextEditingController();
-  final _locationController = TextEditingController();
-  final _contactController = TextEditingController();
-  final _descriptionController = TextEditingController();
-  final _facebookController = TextEditingController();
-  final _instagramController = TextEditingController();
-  final _tiktokController = TextEditingController();
-  final _hoursController = TextEditingController();
+class _EditShopScreenState extends State<EditShopScreen> {
+  late final TextEditingController _storeNameController;
+  late final TextEditingController _locationController;
+  late final TextEditingController _contactController;
+  late final TextEditingController _descriptionController;
+  late final TextEditingController _facebookController;
+  late final TextEditingController _instagramController;
+  late final TextEditingController _tiktokController;
+  late final TextEditingController _hoursController;
   final _storeService = StoreService();
   bool _isLoading = false;
 
-  void _registerStore() async {
+  @override
+  void initState() {
+    super.initState();
+    _storeNameController = TextEditingController(text: widget.store.storeName);
+    _locationController = TextEditingController(text: widget.store.location);
+    _contactController = TextEditingController(text: widget.store.contact);
+    _descriptionController = TextEditingController(text: widget.store.description);
+    _facebookController = TextEditingController(text: widget.store.facebookUrl);
+    _instagramController = TextEditingController(text: widget.store.instagramUrl);
+    _tiktokController = TextEditingController(text: widget.store.tiktokUrl);
+    _hoursController = TextEditingController(text: widget.store.businessHours);
+  }
+
+  @override
+  void dispose() {
+    _storeNameController.dispose();
+    _locationController.dispose();
+    _contactController.dispose();
+    _descriptionController.dispose();
+    _facebookController.dispose();
+    _instagramController.dispose();
+    _tiktokController.dispose();
+    _hoursController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveChanges() async {
     if (_storeNameController.text.isEmpty ||
         _locationController.text.isEmpty ||
         _contactController.text.isEmpty ||
@@ -36,32 +63,30 @@ class _RegisterStoreScreenState extends State<RegisterStoreScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final store = StoreModel(
-        storeId: '',
-        ownerUid: FirebaseAuth.instance.currentUser!.uid,
-        storeName: _storeNameController.text.trim(),
-        location: _locationController.text.trim(),
-        contact: _contactController.text.trim(),
-        description: _descriptionController.text.trim(),
-        facebookUrl: _facebookController.text.trim(),
-        instagramUrl: _instagramController.text.trim(),
-        tiktokUrl: _tiktokController.text.trim(),
-        businessHours: _hoursController.text.trim(),
-      );
+      final updatedData = {
+        'storeName': _storeNameController.text.trim(),
+        'location': _locationController.text.trim(),
+        'contact': _contactController.text.trim(),
+        'description': _descriptionController.text.trim(),
+        'facebookUrl': _facebookController.text.trim(),
+        'instagramUrl': _instagramController.text.trim(),
+        'tiktokUrl': _tiktokController.text.trim(),
+        'businessHours': _hoursController.text.trim(),
+      };
 
-      await _storeService.registerStore(store);
+      await _storeService.updateStore(widget.store.storeId, updatedData);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Store registered successfully!')),
+          const SnackBar(content: Text('Shop details updated successfully!')),
         );
-        Navigator.pushReplacementNamed(context, '/owner-home');
+        Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Failed to register store: $e')));
+        ).showSnackBar(SnackBar(content: Text('Failed to update shop: $e')));
       }
     }
 
@@ -80,7 +105,7 @@ class _RegisterStoreScreenState extends State<RegisterStoreScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'Register Store',
+          'Edit Shop Details',
           style: TextStyle(
             color: Colors.blue[700],
             fontWeight: FontWeight.bold,
@@ -92,20 +117,6 @@ class _RegisterStoreScreenState extends State<RegisterStoreScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Store Details',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue[700],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Fill in your store information',
-              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 32),
             _buildTextField(
               controller: _storeNameController,
               label: 'Store Name',
@@ -168,7 +179,7 @@ class _RegisterStoreScreenState extends State<RegisterStoreScreen> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
-                onPressed: _isLoading ? null : _registerStore,
+                onPressed: _isLoading ? null : _saveChanges,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue[700],
                   shape: RoundedRectangleBorder(
@@ -178,7 +189,7 @@ class _RegisterStoreScreenState extends State<RegisterStoreScreen> {
                 child: _isLoading
                     ? const CircularProgressIndicator(color: Colors.white)
                     : const Text(
-                        'Register Store',
+                        'Save Changes',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -229,18 +240,5 @@ class _RegisterStoreScreenState extends State<RegisterStoreScreen> {
         ),
       ],
     );
-  }
-
-  @override
-  void dispose() {
-    _storeNameController.dispose();
-    _locationController.dispose();
-    _contactController.dispose();
-    _descriptionController.dispose();
-    _facebookController.dispose();
-    _instagramController.dispose();
-    _tiktokController.dispose();
-    _hoursController.dispose();
-    super.dispose();
   }
 }
