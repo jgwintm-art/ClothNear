@@ -31,7 +31,11 @@ import 'cloudinary_file_reader_stub.dart'
 /// (cloudinary_file_reader_io.dart) that uses dart:io, so the web compiler
 /// never sees dart:io symbols.
 class CloudinaryService {
-  static String get _cloudName => dotenv.env['CLOUDINARY_CLOUD_NAME'] ?? '';
+  static String get _cloudName {
+    const fromDefine = String.fromEnvironment('CLOUDINARY_CLOUD_NAME');
+    if (fromDefine.isNotEmpty) return fromDefine;
+    return dotenv.env['CLOUDINARY_CLOUD_NAME'] ?? '';
+  }
 
   static const String _uploadPreset = 'clothnear_upload';
   static const String _folder = 'clothnear';
