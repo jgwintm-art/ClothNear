@@ -859,69 +859,67 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     bool disabled = false,
   }) {
     final isSelected = _paymentMethod == method && !disabled;
-    return Expanded(
-      child: GestureDetector(
-        onTap: disabled
-            ? () => ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(EnvConfig.paymongoConfigHint),
-                  duration: const Duration(seconds: 4),
-                ),
-              )
-            : () => setState(() => _paymentMethod = method),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
+    return GestureDetector( // Removed Expanded here
+      onTap: disabled
+          ? () => ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(EnvConfig.paymongoConfigHint),
+                duration: const Duration(seconds: 4),
+              ),
+            )
+          : () => setState(() => _paymentMethod = method),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: disabled
+              ? Colors.grey[50]
+              : isSelected
+                  ? color.withValues(alpha: 0.1)
+                  : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
             color: disabled
-                ? Colors.grey[50]
+                ? Colors.grey.shade200
                 : isSelected
-                ? color.withValues(alpha: 0.1)
-                : Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: disabled
-                  ? Colors.grey.shade200
-                  : isSelected
-                  ? color
-                  : Colors.grey.shade300,
-              width: isSelected ? 2 : 1,
-            ),
-          ),
-          child: Column(
-            children: [
-              Icon(
-                icon,
-                color: disabled
-                    ? Colors.grey[300]
-                    : isSelected
                     ? color
-                    : Colors.grey,
-                size: 26,
-              ),
-              const SizedBox(height: 6),
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: disabled
-                      ? Colors.grey[400]
-                      : isSelected
-                      ? color
-                      : Colors.grey[700],
-                ),
-                textAlign: TextAlign.center,
-              ),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: disabled ? Colors.grey[300] : Colors.grey[500],
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
+                    : Colors.grey.shade300,
+            width: isSelected ? 2 : 1,
           ),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              icon,
+              color: disabled
+                  ? Colors.grey[300]
+                  : isSelected
+                      ? color
+                      : Colors.grey,
+              size: 26,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: disabled
+                    ? Colors.grey[400]
+                    : isSelected
+                        ? color
+                        : Colors.grey[700],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 10,
+                color: disabled ? Colors.grey[300] : Colors.grey[500],
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       ),
     );

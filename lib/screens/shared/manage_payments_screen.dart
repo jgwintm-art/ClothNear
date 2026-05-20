@@ -359,7 +359,7 @@ class _ManagePaymentsScreenState extends State<ManagePaymentsScreen>
       case 'partial_cash':
         return 'Cash (Partial)';
       default:
-        return m.isNotEmpty ? m : 'Unknown';
+        return 'Unknown';
     }
   }
 

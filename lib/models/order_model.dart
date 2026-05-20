@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 class OrderModel {
   final String orderId;
   final String customerUid;
@@ -79,45 +81,75 @@ class OrderModel {
   });
 
   factory OrderModel.fromMap(Map<String, dynamic> map, String id) {
-    return OrderModel(
-      orderId: id,
-      customerUid: map['customerUid'] ?? '',
-      storeId: map['storeId'] ?? '',
-      storeName: map['storeName'] ?? '',
-      items: List<Map<String, dynamic>>.from(map['items'] ?? []),
-      totalPrice: (map['totalPrice'] ?? 0).toDouble(),
-      amountPaid: (map['amountPaid'] ?? 0).toDouble(),
-      remainingBalance: (map['remainingBalance'] ?? 0).toDouble(),
-      paymentType: map['paymentType'] ?? 'full',
-      orderType: map['orderType'] ?? 'normal',
-      status: map['status'] ?? 'processing',
-      designType: map['designType'] ?? 'preset',
-      designUrl: map['designUrl'] ?? '',
-      designName: map['designName'] ?? '',
-      specialInstructions: map['specialInstructions'] ?? '',
-      createdAt: map['createdAt'] != null
-          ? map['createdAt'] is int
-                ? DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int)
-                : map['createdAt'] is DateTime
-                ? map['createdAt'] as DateTime
-                : (map['createdAt'] as dynamic).toDate()
-          : DateTime.now(),
-      // null-coalesce to 'online' so every legacy document is safe.
-      orderSource: map['orderSource'] as String? ?? 'online',
-      workerUid: map['workerUid'] as String?,
-      workerName: map['workerName'] as String?,
-      // PayMongo
-      paymongoLinkId: map['paymongoLinkId'] as String?,
-      paymongoCheckoutUrl: map['paymongoCheckoutUrl'] as String?,
-      paymentChannel: map['paymentChannel'] as String?,
-      paymongoPaymentStatus: map['paymongoPaymentStatus'] as String?,
-      // Payment audit
-      paymentConfirmedAt: map['paymentConfirmedAt'] as int?,
-      paymentConfirmedBy: map['paymentConfirmedBy'] as String?,
-      paymentMethod: map['paymentMethod'] as String?,
-      paymongoPaymentId: map['paymongoPaymentId'] as String?,
-      paymentNote: map['paymentNote'] as String?,
-    );
+    try {
+      // Explicitly log the map data for debugging
+      debugPrint('OrderModel.fromMap: Processing map for ID $id: $map');
+
+      final String? paymentMethod = map['paymentMethod'] as String?;
+      final String? paymentChannel = map['paymentChannel'] as String?;
+      final String? paymongoLinkId = map['paymongoLinkId'] as String?;
+      final String? paymongoCheckoutUrl = map['paymongoCheckoutUrl'] as String?;
+      final String? paymongoPaymentStatus = map['paymongoPaymentStatus'] as String?;
+      final String? paymentConfirmedBy = map['paymentConfirmedBy'] as String?;
+      final String? paymongoPaymentId = map['paymongoPaymentId'] as String?;
+      final String? paymentNote = map['paymentNote'] as String?;
+      final String? workerUid = map['workerUid'] as String?;
+      final String? workerName = map['workerName'] as String?;
+
+      debugPrint('paymentMethod: $paymentMethod (is null: ${paymentMethod == null})');
+      debugPrint('paymentChannel: $paymentChannel (is null: ${paymentChannel == null})');
+      debugPrint('paymongoLinkId: $paymongoLinkId (is null: ${paymongoLinkId == null})');
+      debugPrint('paymongoCheckoutUrl: $paymongoCheckoutUrl (is null: ${paymongoCheckoutUrl == null})');
+      debugPrint('paymongoPaymentStatus: $paymongoPaymentStatus (is null: ${paymongoPaymentStatus == null})');
+      debugPrint('paymentConfirmedBy: $paymentConfirmedBy (is null: ${paymentConfirmedBy == null})');
+      debugPrint('paymongoPaymentId: $paymongoPaymentId (is null: ${paymongoPaymentId == null})');
+      debugPrint('paymentNote: $paymentNote (is null: ${paymentNote == null})');
+      debugPrint('workerUid: $workerUid (is null: ${workerUid == null})');
+      debugPrint('workerName: $workerName (is null: ${workerName == null})');
+
+      return OrderModel(
+        orderId: id,
+        customerUid: map['customerUid'] ?? '',
+        storeId: map['storeId'] ?? '',
+        storeName: map['storeName'] ?? '',
+        items: List<Map<String, dynamic>>.from(map['items'] ?? []),
+        totalPrice: (map['totalPrice'] ?? 0).toDouble(),
+        amountPaid: (map['amountPaid'] ?? 0).toDouble(),
+        remainingBalance: (map['remainingBalance'] ?? 0).toDouble(),
+        paymentType: map['paymentType'] ?? 'full',
+        orderType: map['orderType'] ?? 'normal',
+        status: map['status'] ?? 'processing',
+        designType: map['designType'] ?? 'preset',
+        designUrl: map['designUrl'] ?? '',
+        designName: map['designName'] ?? '',
+        specialInstructions: map['specialInstructions'] ?? '',
+        createdAt: map['createdAt'] != null
+            ? map['createdAt'] is int
+                  ? DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int)
+                  : map['createdAt'] is DateTime
+                  ? map['createdAt'] as DateTime
+                  : (map['createdAt'] as dynamic).toDate()
+            : DateTime.now(),
+        // null-coalesce to 'online' so every legacy document is safe.
+        orderSource: map['orderSource'] as String? ?? 'online',
+        workerUid: workerUid,
+        workerName: workerName,
+        // PayMongo
+        paymongoLinkId: paymongoLinkId,
+        paymongoCheckoutUrl: paymongoCheckoutUrl,
+        paymentChannel: paymentChannel,
+        paymongoPaymentStatus: paymongoPaymentStatus,
+        // Payment audit
+        paymentConfirmedAt: map['paymentConfirmedAt'] as int?,
+        paymentConfirmedBy: paymentConfirmedBy,
+        paymentMethod: paymentMethod,
+        paymongoPaymentId: paymongoPaymentId,
+        paymentNote: paymentNote,
+      );
+    } catch (e) {
+      debugPrint('OrderModel.fromMap: ERROR deserializing order ID $id. Map: $map. Error: $e');
+      rethrow;
+    }
   }
 
   Map<String, dynamic> toMap() {
@@ -264,31 +296,34 @@ class OrderModel {
     }
   }
 
-  bool get isOnlinePayment =>
-      paymongoLinkId != null && paymongoLinkId!.isNotEmpty;
+  bool get isOnlinePayment {
+    final id = paymongoLinkId;
+    return id != null && id.isNotEmpty;
+  }
 
   bool get isPaymentConfirmed =>
       isOnlinePayment ? paymongoPaymentStatus == 'paid' : remainingBalance <= 0;
 
   String get paymentMethodDisplay {
-    if (paymentMethod != null) {
-      switch (paymentMethod) {
-        case 'gcash':
-          return 'GCash';
-        case 'paymaya':
-          return 'Maya';
-        case 'card':
-          return 'Card';
-        case 'cash':
-          return 'Cash';
-        case 'partial_cash':
-          return 'Cash (Partial)';
-        default: // Handle unexpected string values
-          return paymentMethod!; // Explicitly assert non-null
-      }
+    // Safely handle null paymentMethod before switching.
+    // If paymentMethod is null, it's an in-person cash payment by default.
+    final method = paymentMethod ?? 'cash';
+
+    switch (method) {
+      case 'gcash':
+        return 'GCash';
+      case 'paymaya':
+        return 'Maya';
+      case 'card':
+        return 'Card';
+      case 'cash':
+        return 'Cash';
+      case 'partial_cash':
+        return 'Cash (Partial)';
+      default:
+        // Fallback for any unexpected string values, defaults to cash
+        return 'In-Person / Cash';
     }
-    if (isOnlinePayment) return paymentChannelDisplay;
-    return 'In-Person / Cash';
   }
 
   String get resolvedPaymentStatus {
