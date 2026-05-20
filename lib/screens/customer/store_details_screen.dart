@@ -85,13 +85,46 @@ class StoreDetailsScreen extends StatelessWidget {
                   Text(
                     store.description,
                     style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey[500],
-                      height: 1.4,
+                      fontSize: 14,
+                      color: Colors.grey[800],
+                      height: 1.5,
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                   ),
+                  const SizedBox(height: 12),
+
+                  // Business Hours
+                  if (store.businessHours.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          Icon(Icons.access_time, size: 16, color: Colors.blue[700]),
+                          const SizedBox(width: 8),
+                          Text(
+                            store.businessHours,
+                            style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                  // Social Media
+                  if (store.facebookUrl.isNotEmpty ||
+                      store.instagramUrl.isNotEmpty ||
+                      store.tiktokUrl.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 20),
+                      child: Row(
+                        children: [
+                          if (store.facebookUrl.isNotEmpty)
+                            _buildSocialIcon(Icons.facebook, store.facebookUrl),
+                          if (store.instagramUrl.isNotEmpty)
+                            _buildSocialIcon(Icons.camera_alt, store.instagramUrl),
+                          if (store.tiktokUrl.isNotEmpty)
+                            _buildSocialIcon(Icons.video_library, store.tiktokUrl),
+                        ],
+                      ),
+                    ),
                   const SizedBox(height: 20),
 
                   // Products section
@@ -148,6 +181,18 @@ class StoreDetailsScreen extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSocialIcon(IconData icon, String url) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 16),
+      child: GestureDetector(
+        onTap: () async {
+          // Placeholder for launchUrl logic
+        },
+        child: Icon(icon, size: 24, color: Colors.blue[700]),
       ),
     );
   }
