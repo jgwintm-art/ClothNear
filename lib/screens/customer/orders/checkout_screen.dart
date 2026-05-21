@@ -270,6 +270,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             paymentType: _paymentType,
             paymentChannel: _paymentChannel,
             orderItems: _buildOrderItems(),
+            cartItemIds: widget.items.map((i) => i.cartItemId).toList(), // Added missing argument
           ),
         ),
         (route) => route.isFirst,

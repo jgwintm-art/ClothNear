@@ -19,7 +19,8 @@ class PaymentPendingScreen extends StatefulWidget {
   final double totalAmount;
   final String paymentType; // 'full' | 'half'
   final String paymentChannel;
-  final List<Map<String, dynamic>> orderItems; // for inventory deduction
+  final List<Map<String, dynamic>> orderItems; // Added field
+  final List<String> cartItemIds;
 
   const PaymentPendingScreen({
     super.key,
@@ -29,7 +30,8 @@ class PaymentPendingScreen extends StatefulWidget {
     required this.totalAmount,
     required this.paymentType,
     required this.paymentChannel,
-    required this.orderItems,
+    required this.orderItems, // Added parameter
+    required this.cartItemIds,
   });
 
   @override
@@ -103,10 +105,7 @@ class _PaymentPendingScreenState extends State<PaymentPendingScreen> {
         totalPrice: widget.totalAmount,
         paymentChannel: widget.paymentChannel,
         orderItems: widget.orderItems,
-        cartItemIds: widget.orderItems
-            .map((item) => item['cartItemId'] as String)
-            .where((id) => id.isNotEmpty)
-            .toList(),
+        cartItemIds: widget.cartItemIds, // Added missing argument
       );
 
       if (!mounted) return;
